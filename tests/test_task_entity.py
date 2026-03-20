@@ -150,10 +150,10 @@ def test_task_entity_device_info():
 
     # Verify device identifiers include the story_id
     assert (DOMAIN, "my_story") in device_info["identifiers"]
-    
+
     # Verify device name includes the story_id
     assert "my_story" in device_info["name"]
-    
+
     # Verify manufacturer and model
     assert device_info["manufacturer"] == "StoryFlow"
     assert device_info["model"] == "Story"

@@ -21,7 +21,7 @@ async def async_setup_entry(
     if story_id is None:
         story_name = entry.data.get("story_name", "")
         story_id = story_name.lower().replace(" ", "_")
-    
+
     tasks = entry.data.get("tasks", [])
 
     # Create progress sensor for the story

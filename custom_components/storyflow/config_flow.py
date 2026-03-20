@@ -44,7 +44,7 @@ class StoryFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not errors:
                 # Generate story_id using the same logic as StoryManager
                 story_id = story_name.lower().replace(" ", "_")
-                
+
                 data = {
                     "story_name": story_name,
                     "story_description": story_description,

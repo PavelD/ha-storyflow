@@ -89,22 +89,18 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             clone_story_service,
             schema=CLONE_STORY_SCHEMA,
         )
-    
+
     # Increment reference count
     hass.data[DOMAIN]["service_ref_count"] += 1
-    _LOGGER.debug(
-        "Service reference count: %d", hass.data[DOMAIN]["service_ref_count"]
-    )
+    _LOGGER.debug("Service reference count: %d", hass.data[DOMAIN]["service_ref_count"])
 
 
 async def async_unload_services(hass: HomeAssistant) -> None:
     """Unload services with reference counting."""
     # Decrement reference count
     hass.data[DOMAIN]["service_ref_count"] -= 1
-    _LOGGER.debug(
-        "Service reference count: %d", hass.data[DOMAIN]["service_ref_count"]
-    )
-    
+    _LOGGER.debug("Service reference count: %d", hass.data[DOMAIN]["service_ref_count"])
+
     # Only remove services when the last config entry is unloaded
     if hass.data[DOMAIN]["service_ref_count"] <= 0:
         _LOGGER.debug("Unregistering StoryFlow services")

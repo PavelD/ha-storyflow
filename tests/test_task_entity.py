@@ -13,6 +13,7 @@ def mock_storage_handler():
     storage = MagicMock()
     storage.load_story = AsyncMock()
     storage.save_story = AsyncMock()
+    storage.async_update_task = AsyncMock()
     return storage
 
 
@@ -228,8 +229,6 @@ def test_task_entity_device_info_grouping(mock_storage_handler):
 @pytest.mark.asyncio
 async def test_async_update_state(mock_storage_handler, sample_story_data):
     """Test updating task state persists to storage."""
-    mock_storage_handler.load_story.return_value = sample_story_data
-
     entity = TaskEntity(
         story_id="test_story",
         task_id="test_story_task_0",
@@ -245,13 +244,10 @@ async def test_async_update_state(mock_storage_handler, sample_story_data):
         # Verify state updated internally
         assert entity.state == "progress"
 
-        # Verify storage was loaded and saved
-        mock_storage_handler.load_story.assert_called_once_with("test_story")
-        mock_storage_handler.save_story.assert_called_once()
-
-        # Verify the saved data has updated state
-        saved_data = mock_storage_handler.save_story.call_args[0][1]
-        assert saved_data["tasks"][0]["state"] == "progress"
+        # Verify async_update_task was called with correct arguments
+        mock_storage_handler.async_update_task.assert_called_once_with(
+            "test_story", "test_story_task_0", {"state": "progress"}
+        )
 
         # Verify Home Assistant was notified
         mock_write_state.assert_called_once()
@@ -279,8 +275,6 @@ async def test_async_update_state_invalid(mock_storage_handler, sample_story_dat
 @pytest.mark.asyncio
 async def test_async_update_assignment(mock_storage_handler, sample_story_data):
     """Test updating task assignment persists to storage."""
-    mock_storage_handler.load_story.return_value = sample_story_data
-
     entity = TaskEntity(
         story_id="test_story",
         task_id="test_story_task_0",
@@ -297,13 +291,10 @@ async def test_async_update_assignment(mock_storage_handler, sample_story_data):
         # Verify assignment updated internally
         assert entity.assigned_to == "person.jane"
 
-        # Verify storage was updated
-        mock_storage_handler.load_story.assert_called_once_with("test_story")
-        mock_storage_handler.save_story.assert_called_once()
-
-        # Verify the saved data has updated assignment
-        saved_data = mock_storage_handler.save_story.call_args[0][1]
-        assert saved_data["tasks"][0]["assigned_to"] == "person.jane"
+        # Verify async_update_task was called with correct arguments
+        mock_storage_handler.async_update_task.assert_called_once_with(
+            "test_story", "test_story_task_0", {"assigned_to": "person.jane"}
+        )
 
         # Verify Home Assistant was notified
         mock_write_state.assert_called_once()
@@ -314,8 +305,6 @@ async def test_async_update_assignment_unassign(
     mock_storage_handler, sample_story_data
 ):
     """Test unassigning a task (setting to None)."""
-    mock_storage_handler.load_story.return_value = sample_story_data
-
     entity = TaskEntity(
         story_id="test_story",
         task_id="test_story_task_0",
@@ -332,16 +321,15 @@ async def test_async_update_assignment_unassign(
         # Verify assignment cleared
         assert entity.assigned_to is None
 
-        # Verify saved data reflects unassignment
-        saved_data = mock_storage_handler.save_story.call_args[0][1]
-        assert saved_data["tasks"][0]["assigned_to"] is None
+        # Verify async_update_task was called with None
+        mock_storage_handler.async_update_task.assert_called_once_with(
+            "test_story", "test_story_task_0", {"assigned_to": None}
+        )
 
 
 @pytest.mark.asyncio
 async def test_async_update_attributes_single(mock_storage_handler, sample_story_data):
     """Test updating a single attribute."""
-    mock_storage_handler.load_story.return_value = sample_story_data
-
     entity = TaskEntity(
         story_id="test_story",
         task_id="test_story_task_0",
@@ -357,9 +345,10 @@ async def test_async_update_attributes_single(mock_storage_handler, sample_story
         # Verify attribute updated
         assert entity.title == "New Title"
 
-        # Verify storage updated
-        saved_data = mock_storage_handler.save_story.call_args[0][1]
-        assert saved_data["tasks"][0]["title"] == "New Title"
+        # Verify async_update_task was called
+        mock_storage_handler.async_update_task.assert_called_once_with(
+            "test_story", "test_story_task_0", {"title": "New Title"}
+        )
 
         mock_write_state.assert_called_once()
 
@@ -369,8 +358,6 @@ async def test_async_update_attributes_multiple(
     mock_storage_handler, sample_story_data
 ):
     """Test updating multiple attributes at once."""
-    mock_storage_handler.load_story.return_value = sample_story_data
-
     entity = TaskEntity(
         story_id="test_story",
         task_id="test_story_task_0",
@@ -398,14 +385,18 @@ async def test_async_update_attributes_multiple(
         assert entity.assigned_to == "person.john"
         assert entity.order == 5
 
-        # Verify storage updated with all changes
-        saved_data = mock_storage_handler.save_story.call_args[0][1]
-        task_data = saved_data["tasks"][0]
-        assert task_data["title"] == "New Title"
-        assert task_data["description"] == "New Description"
-        assert task_data["state"] == "progress"
-        assert task_data["assigned_to"] == "person.john"
-        assert task_data["order"] == 5
+        # Verify async_update_task was called with all updates
+        mock_storage_handler.async_update_task.assert_called_once_with(
+            "test_story",
+            "test_story_task_0",
+            {
+                "title": "New Title",
+                "description": "New Description",
+                "state": "progress",
+                "assigned_to": "person.john",
+                "order": 5,
+            },
+        )
 
 
 @pytest.mark.asyncio
@@ -447,7 +438,10 @@ async def test_async_update_attributes_invalid_state(mock_storage_handler):
 @pytest.mark.asyncio
 async def test_persist_to_storage_story_not_found(mock_storage_handler):
     """Test error handling when story not found in storage."""
-    mock_storage_handler.load_story.return_value = None
+    # Configure async_update_task to raise ValueError
+    mock_storage_handler.async_update_task.side_effect = ValueError(
+        "Story 'missing_story' not found"
+    )
 
     entity = TaskEntity(
         story_id="missing_story",
@@ -468,13 +462,10 @@ async def test_persist_to_storage_story_not_found(mock_storage_handler):
 @pytest.mark.asyncio
 async def test_persist_to_storage_task_not_found(mock_storage_handler):
     """Test error handling when task not found in story."""
-    mock_storage_handler.load_story.return_value = {
-        "title": "Test Story",
-        "description": "Test",
-        "tasks": [
-            {"id": "different_task_id", "title": "Different Task", "state": "todo"}
-        ],
-    }
+    # Configure async_update_task to raise ValueError
+    mock_storage_handler.async_update_task.side_effect = ValueError(
+        "Task 'missing_task_id' not found in story 'test_story'"
+    )
 
     entity = TaskEntity(
         story_id="test_story",

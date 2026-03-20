@@ -17,6 +17,9 @@ from custom_components.storyflow.const import DOMAIN, TASK_STATES
 
 async def test_services_registered(hass: HomeAssistant):
     """Test that services are registered correctly."""
+    # Initialize domain data
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+    
     await async_setup_services(hass)
 
     # Verify all three services are registered
@@ -27,6 +30,7 @@ async def test_services_registered(hass: HomeAssistant):
 
 async def test_set_task_state_valid(hass: HomeAssistant):
     """Test set_task_state service with valid data."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
     await async_setup_services(hass)
 
     with patch("custom_components.storyflow.services._LOGGER") as mock_logger:
@@ -45,6 +49,7 @@ async def test_set_task_state_valid(hass: HomeAssistant):
 
 async def test_set_task_state_invalid_state(hass: HomeAssistant):
     """Test set_task_state service rejects invalid state."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
     await async_setup_services(hass)
 
     with pytest.raises(vol.Invalid):
@@ -58,6 +63,7 @@ async def test_set_task_state_invalid_state(hass: HomeAssistant):
 
 async def test_set_task_state_missing_fields(hass: HomeAssistant):
     """Test set_task_state service requires all fields."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
     await async_setup_services(hass)
 
     # Missing new_state
@@ -81,6 +87,7 @@ async def test_set_task_state_missing_fields(hass: HomeAssistant):
 
 async def test_assign_task_valid(hass: HomeAssistant):
     """Test assign_task service with valid data."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
     await async_setup_services(hass)
 
     with patch("custom_components.storyflow.services._LOGGER") as mock_logger:
@@ -99,6 +106,7 @@ async def test_assign_task_valid(hass: HomeAssistant):
 
 async def test_assign_task_optional_person(hass: HomeAssistant):
     """Test assign_task service with optional person_id."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
     await async_setup_services(hass)
 
     with patch("custom_components.storyflow.services._LOGGER") as mock_logger:
@@ -116,6 +124,7 @@ async def test_assign_task_optional_person(hass: HomeAssistant):
 
 async def test_clone_story_valid(hass: HomeAssistant):
     """Test clone_story service with valid data."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
     await async_setup_services(hass)
 
     with patch("custom_components.storyflow.services._LOGGER") as mock_logger:
@@ -134,6 +143,7 @@ async def test_clone_story_valid(hass: HomeAssistant):
 
 async def test_clone_story_optional_name(hass: HomeAssistant):
     """Test clone_story service with optional new_story_name."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
     await async_setup_services(hass)
 
     with patch("custom_components.storyflow.services._LOGGER") as mock_logger:
@@ -151,6 +161,7 @@ async def test_clone_story_optional_name(hass: HomeAssistant):
 
 async def test_unload_services(hass: HomeAssistant):
     """Test that services are removed on unload."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
     await async_setup_services(hass)
 
     # Verify services are registered
@@ -169,6 +180,7 @@ async def test_unload_services(hass: HomeAssistant):
 
 async def test_all_task_states_valid(hass: HomeAssistant):
     """Test that all defined task states are accepted."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
     await async_setup_services(hass)
 
     with patch("custom_components.storyflow.services._LOGGER"):

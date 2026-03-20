@@ -24,6 +24,9 @@ async def test_async_setup(hass: HomeAssistant):
 
 async def test_async_setup_entry_creates_entities(hass: HomeAssistant):
     """Test config entry setup creates expected entities."""
+    # Initialize domain data
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+    
     # Create a mock config entry
     entry = ConfigEntry(
         version=1,
@@ -84,6 +87,8 @@ async def test_async_setup_entry_creates_entities(hass: HomeAssistant):
 
 async def test_async_setup_entry_uses_persisted_story_id(hass: HomeAssistant):
     """Test that config entry uses persisted story_id."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+    
     entry = ConfigEntry(
         version=1,
         minor_version=0,
@@ -115,6 +120,8 @@ async def test_async_setup_entry_uses_persisted_story_id(hass: HomeAssistant):
 
 async def test_async_unload_entry_cleans_up(hass: HomeAssistant):
     """Test config entry unload cleans up properly."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+    
     entry = ConfigEntry(
         version=1,
         minor_version=0,
@@ -161,6 +168,8 @@ async def test_async_unload_entry_cleans_up(hass: HomeAssistant):
 
 async def test_async_setup_entry_forwards_to_platforms(hass: HomeAssistant):
     """Test that setup forwards to sensor platform."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+    
     entry = ConfigEntry(
         version=1,
         minor_version=0,
@@ -196,6 +205,8 @@ async def test_async_setup_entry_forwards_to_platforms(hass: HomeAssistant):
 
 async def test_multiple_entries_same_hass_data(hass: HomeAssistant):
     """Test that multiple config entries can coexist."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+    
     entry1 = ConfigEntry(
         version=1,
         minor_version=0,
@@ -248,6 +259,8 @@ async def test_multiple_entries_same_hass_data(hass: HomeAssistant):
 
 async def test_legacy_entry_without_story_id(hass: HomeAssistant):
     """Test that legacy entries without story_id still work with fallback."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+    
     entry = ConfigEntry(
         version=1,
         minor_version=0,

@@ -1,4 +1,5 @@
 """Task entity for StoryFlow."""
+
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.entity import DeviceInfo
 

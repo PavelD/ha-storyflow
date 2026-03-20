@@ -1,4 +1,5 @@
 """Sensor platform for StoryFlow."""
+
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -18,10 +19,10 @@ async def async_setup_entry(
     manager = hass.data[DOMAIN][entry.entry_id]
     story_id = entry.data.get("story_name", "").lower().replace(" ", "_")
     tasks = entry.data.get("tasks", [])
-    
+
     # Create progress sensor for the story
     sensors = [StoryProgressEntity(story_id, tasks)]
-    
+
     # Create task entities
     for idx, task in enumerate(tasks):
         task_id = f"{story_id}_task_{idx}"
@@ -35,7 +36,7 @@ async def async_setup_entry(
             order=idx,
         )
         sensors.append(task_entity)
-    
+
     async_add_entities(sensors)
-    
+
     return True

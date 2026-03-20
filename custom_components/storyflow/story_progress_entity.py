@@ -1,4 +1,5 @@
 """Story progress entity for StoryFlow."""
+
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.entity import DeviceInfo
 
@@ -44,7 +45,7 @@ class StoryProgressEntity(SensorEntity):
         done = sum(1 for t in self.tasks if t.get("state") in ["done", "rejected"])
         in_progress = sum(1 for t in self.tasks if t.get("state") == "progress")
         todo = sum(1 for t in self.tasks if t.get("state") == "todo")
-        
+
         return {
             "story_id": self.story_id,
             "total_tasks": total,

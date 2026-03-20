@@ -1,4 +1,5 @@
 """StoryFlow integration."""
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
@@ -44,10 +45,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     # Unload services
     await async_unload_services(hass)
-    
+
     # Unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    
+
     if unload_ok:
         # Remove data
         hass.data[DOMAIN].pop(entry.entry_id)

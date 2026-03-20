@@ -1,11 +1,15 @@
 """Services for StoryFlow."""
 
+import logging
+
 import voluptuous as vol
 
 from homeassistant.core import HomeAssistant, ServiceCall
 import homeassistant.helpers.config_validation as cv
 
 from .const import DOMAIN, TASK_STATES
+
+_LOGGER = logging.getLogger(__name__)
 
 SERVICE_SET_STATE = "set_task_state"
 SERVICE_ASSIGN = "assign_task"
@@ -43,7 +47,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
         # TODO: Implement - find task entity and update state
         # For now, log the call
-        hass.logger.info(f"Setting task {task_id} to state {new_state}")
+        _LOGGER.info(f"Setting task {task_id} to state {new_state}")
 
     async def assign_service(call: ServiceCall) -> None:
         """Assign task to person."""
@@ -51,7 +55,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         person_id = call.data.get("person_id")
 
         # TODO: Implement - find task entity and update assigned_to
-        hass.logger.info(f"Assigning task {task_id} to {person_id}")
+        _LOGGER.info(f"Assigning task {task_id} to {person_id}")
 
     async def clone_story_service(call: ServiceCall) -> None:
         """Clone a story."""
@@ -59,7 +63,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         new_title = call.data.get("new_story_name")
 
         # TODO: Implement - duplicate story with reset tasks
-        hass.logger.info(f"Cloning story {story_id} to {new_title}")
+        _LOGGER.info(f"Cloning story {story_id} to {new_title}")
 
     # Register services
     hass.services.async_register(

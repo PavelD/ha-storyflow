@@ -241,9 +241,14 @@ async def test_multiple_entries_same_hass_data(hass: HomeAssistant):
          patch("custom_components.storyflow.StoryManager") as mock_manager, \
          patch("custom_components.storyflow.async_setup_services"):
         
-        mock_manager_instance = AsyncMock()
-        mock_manager_instance.create_story = AsyncMock(side_effect=["story_1", "story_2"])
-        mock_manager.return_value = mock_manager_instance
+        # Create separate mock instances for each entry
+        mock_manager_instance1 = AsyncMock()
+        mock_manager_instance1.create_story = AsyncMock(return_value="story_1")
+        
+        mock_manager_instance2 = AsyncMock()
+        mock_manager_instance2.create_story = AsyncMock(return_value="story_2")
+        
+        mock_manager.side_effect = [mock_manager_instance1, mock_manager_instance2]
         
         # Setup both entries
         await async_setup_entry(hass, entry1)

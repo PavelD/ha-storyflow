@@ -30,8 +30,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Save the story to persistent storage
     await manager.create_story(story_name, story_desc, tasks)
 
-    # Store manager in hass.data
-    hass.data[DOMAIN][entry.entry_id] = manager
+    # Store manager and storage in hass.data
+    hass.data[DOMAIN][entry.entry_id] = {
+        "manager": manager,
+        "storage": storage,
+    }
 
     # Set up services
     await async_setup_services(hass)

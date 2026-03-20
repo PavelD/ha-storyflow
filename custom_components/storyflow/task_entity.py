@@ -15,6 +15,7 @@ class TaskEntity(SensorEntity):
         task_id,
         title,
         description,
+        storage_handler,
         assigned_to=None,
         state="todo",
         order=None,
@@ -26,6 +27,7 @@ class TaskEntity(SensorEntity):
         self.description = description
         self.assigned_to = assigned_to
         self.order = order
+        self.storage_handler = storage_handler
 
         if state not in TASK_STATES:
             raise ValueError(f"Invalid state '{state}'. Must be one of {TASK_STATES}")
@@ -67,3 +69,84 @@ class TaskEntity(SensorEntity):
             manufacturer="StoryFlow",
             model="Story",
         )
+
+    async def _persist_to_storage(self, updates: dict) -> None:
+        """Helper to update task in storage.
+
+        Args:
+            updates: Dictionary of task attributes to update
+
+        Raises:
+            ValueError: If story or task not found in storage
+        """
+        story_data = await self.storage_handler.load_story(self.story_id)
+        if not story_data:
+            raise ValueError(f"Story {self.story_id} not found in storage")
+
+        tasks = story_data.get("tasks", [])
+        for task in tasks:
+            if task.get("id") == self.task_id:
+                task.update(updates)
+                await self.storage_handler.save_story(self.story_id, story_data)
+                return
+
+        raise ValueError(f"Task {self.task_id} not found in story {self.story_id}")
+
+    async def async_update_state(self, new_state: str) -> None:
+        """Update the task state and persist to storage.
+
+        Args:
+            new_state: New state value (must be in TASK_STATES)
+
+        Raises:
+            ValueError: If state is invalid
+        """
+        if new_state not in TASK_STATES:
+            raise ValueError(
+                f"Invalid state '{new_state}'. Must be one of {TASK_STATES}"
+            )
+
+        self._state = new_state
+        await self._persist_to_storage({"state": new_state})
+        self.async_write_ha_state()
+
+    async def async_update_assignment(self, person_id: str | None) -> None:
+        """Update the task assignment and persist to storage.
+
+        Args:
+            person_id: ID of person to assign task to, or None to unassign
+        """
+        self.assigned_to = person_id
+        await self._persist_to_storage({"assigned_to": person_id})
+        self.async_write_ha_state()
+
+    async def async_update_attributes(self, **kwargs) -> None:
+        """Update multiple task attributes at once.
+
+        Args:
+            **kwargs: Attributes to update (title, description, assigned_to, state, order)
+
+        Raises:
+            ValueError: If attribute name is invalid or state value is invalid
+        """
+        valid_attrs = ["title", "description", "assigned_to", "state", "order"]
+
+        for key, value in kwargs.items():
+            if key not in valid_attrs:
+                raise ValueError(
+                    f"Invalid attribute '{key}'. Must be one of {valid_attrs}"
+                )
+
+            if key == "state" and value not in TASK_STATES:
+                raise ValueError(
+                    f"Invalid state '{value}'. Must be one of {TASK_STATES}"
+                )
+
+            # Update internal attribute
+            if key == "state":
+                self._state = value
+            else:
+                setattr(self, key, value)
+
+        await self._persist_to_storage(kwargs)
+        self.async_write_ha_state()

@@ -13,7 +13,8 @@ PLATFORMS = ["sensor"]
 
 async def async_setup(hass: HomeAssistant, config: dict):
     """Set up StoryFlow component."""
-    hass.data.setdefault(DOMAIN, {})
+    # Initialize domain data with service reference counter
+    hass.data.setdefault(DOMAIN, {"service_ref_count": 0})
     return True
 
 

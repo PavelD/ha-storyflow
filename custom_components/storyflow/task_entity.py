@@ -70,28 +70,6 @@ class TaskEntity(SensorEntity):
             model="Story",
         )
 
-    async def _persist_to_storage(self, updates: dict) -> None:
-        """Helper to update task in storage.
-
-        Args:
-            updates: Dictionary of task attributes to update
-
-        Raises:
-            ValueError: If story or task not found in storage
-        """
-        story_data = await self.storage_handler.load_story(self.story_id)
-        if not story_data:
-            raise ValueError(f"Story {self.story_id} not found in storage")
-
-        tasks = story_data.get("tasks", [])
-        for task in tasks:
-            if task.get("id") == self.task_id:
-                task.update(updates)
-                await self.storage_handler.save_story(self.story_id, story_data)
-                return
-
-        raise ValueError(f"Task {self.task_id} not found in story {self.story_id}")
-
     async def async_update_state(self, new_state: str) -> None:
         """Update the task state and persist to storage.
 
@@ -107,7 +85,9 @@ class TaskEntity(SensorEntity):
             )
 
         self._state = new_state
-        await self._persist_to_storage({"state": new_state})
+        await self.storage_handler.async_update_task(
+            self.story_id, self.task_id, {"state": new_state}
+        )
         self.async_write_ha_state()
 
     async def async_update_assignment(self, person_id: str | None) -> None:
@@ -117,7 +97,9 @@ class TaskEntity(SensorEntity):
             person_id: ID of person to assign task to, or None to unassign
         """
         self.assigned_to = person_id
-        await self._persist_to_storage({"assigned_to": person_id})
+        await self.storage_handler.async_update_task(
+            self.story_id, self.task_id, {"assigned_to": person_id}
+        )
         self.async_write_ha_state()
 
     async def async_update_attributes(self, **kwargs) -> None:
@@ -148,5 +130,7 @@ class TaskEntity(SensorEntity):
             else:
                 setattr(self, key, value)
 
-        await self._persist_to_storage(kwargs)
+        await self.storage_handler.async_update_task(
+            self.story_id, self.task_id, kwargs
+        )
         self.async_write_ha_state()

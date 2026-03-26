@@ -2,6 +2,7 @@
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN
 from .services import async_setup_services, async_unload_services
@@ -9,6 +10,9 @@ from .storage_handler import StorageHandler
 from .story_manager import StoryManager
 
 PLATFORMS = ["sensor"]
+
+# Integration can only be configured via config flow, not YAML
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: dict):

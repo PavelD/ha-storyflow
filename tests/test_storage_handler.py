@@ -335,6 +335,24 @@ async def test_async_add_task_missing_id(storage_handler, sample_storage_data):
     assert "id" in str(exc_info.value).lower()
 
 
+@pytest.mark.asyncio
+async def test_async_add_task_duplicate_id(storage_handler, sample_storage_data):
+    """Test adding task with duplicate ID raises ValueError."""
+    storage_handler.store.async_load.return_value = sample_storage_data
+
+    duplicate_task = {
+        "id": "test_story_task_0",  # Already exists in sample_storage_data
+        "title": "Duplicate Task",
+        "description": "This task has a duplicate ID",
+    }
+
+    with pytest.raises(ValueError) as exc_info:
+        await storage_handler.async_add_task("test_story", duplicate_task)
+
+    assert "test_story_task_0" in str(exc_info.value)
+    assert "already exists" in str(exc_info.value)
+
+
 # =============================================================================
 # Tests for async_delete_task
 # =============================================================================

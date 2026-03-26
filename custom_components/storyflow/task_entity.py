@@ -1,9 +1,13 @@
 """Task entity for StoryFlow."""
 
+import logging
+
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN, TASK_STATES
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class TaskEntity(SensorEntity):
@@ -77,30 +81,59 @@ class TaskEntity(SensorEntity):
             new_state: New state value (must be in TASK_STATES)
 
         Raises:
-            ValueError: If state is invalid
+            ValueError: If state is invalid or storage update fails
         """
         if new_state not in TASK_STATES:
             raise ValueError(
                 f"Invalid state '{new_state}'. Must be one of {TASK_STATES}"
             )
 
-        self._state = new_state
-        await self.storage_handler.async_update_task(
-            self.story_id, self.task_id, {"state": new_state}
-        )
-        self.async_write_ha_state()
+        try:
+            # Persist to storage FIRST
+            await self.storage_handler.async_update_task(
+                self.story_id, self.task_id, {"state": new_state}
+            )
+
+            # Only update in-memory state on successful storage update
+            self._state = new_state
+            self.async_write_ha_state()
+
+        except ValueError as err:
+            _LOGGER.error(
+                "Failed to update task %s state to '%s': %s",
+                self.task_id,
+                new_state,
+                err,
+            )
+            raise
 
     async def async_update_assignment(self, person_id: str | None) -> None:
         """Update the task assignment and persist to storage.
 
         Args:
             person_id: ID of person to assign task to, or None to unassign
+
+        Raises:
+            ValueError: If storage update fails
         """
-        self.assigned_to = person_id
-        await self.storage_handler.async_update_task(
-            self.story_id, self.task_id, {"assigned_to": person_id}
-        )
-        self.async_write_ha_state()
+        try:
+            # Persist to storage FIRST
+            await self.storage_handler.async_update_task(
+                self.story_id, self.task_id, {"assigned_to": person_id}
+            )
+
+            # Only update in-memory attribute on successful storage update
+            self.assigned_to = person_id
+            self.async_write_ha_state()
+
+        except ValueError as err:
+            _LOGGER.error(
+                "Failed to update task %s assignment to '%s': %s",
+                self.task_id,
+                person_id,
+                err,
+            )
+            raise
 
     async def async_update_attributes(self, **kwargs) -> None:
         """Update multiple task attributes at once.
@@ -109,10 +142,11 @@ class TaskEntity(SensorEntity):
             **kwargs: Attributes to update (title, description, assigned_to, state, order)
 
         Raises:
-            ValueError: If attribute name is invalid or state value is invalid
+            ValueError: If attribute name is invalid, state value is invalid, or storage update fails
         """
         valid_attrs = ["title", "description", "assigned_to", "state", "order"]
 
+        # Validate all inputs before any updates
         for key, value in kwargs.items():
             if key not in valid_attrs:
                 raise ValueError(
@@ -124,13 +158,26 @@ class TaskEntity(SensorEntity):
                     f"Invalid state '{value}'. Must be one of {TASK_STATES}"
                 )
 
-            # Update internal attribute
-            if key == "state":
-                self._state = value
-            else:
-                setattr(self, key, value)
+        try:
+            # Persist to storage FIRST
+            await self.storage_handler.async_update_task(
+                self.story_id, self.task_id, kwargs
+            )
 
-        await self.storage_handler.async_update_task(
-            self.story_id, self.task_id, kwargs
-        )
-        self.async_write_ha_state()
+            # Only update in-memory attributes on successful storage update
+            for key, value in kwargs.items():
+                if key == "state":
+                    self._state = value
+                else:
+                    setattr(self, key, value)
+
+            self.async_write_ha_state()
+
+        except ValueError as err:
+            _LOGGER.error(
+                "Failed to update task %s attributes %s: %s",
+                self.task_id,
+                list(kwargs.keys()),
+                err,
+            )
+            raise

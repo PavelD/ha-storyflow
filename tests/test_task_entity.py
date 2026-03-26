@@ -481,3 +481,113 @@ async def test_persist_to_storage_task_not_found(mock_storage_handler):
 
     assert "missing_task_id" in str(exc_info.value)
     assert "not found" in str(exc_info.value).lower()
+
+
+# ============================================================================
+# Tests for Storage-First Pattern & State Consistency (Code Review Fixes)
+# ============================================================================
+
+
+@pytest.mark.asyncio
+async def test_async_update_state_storage_failure_consistency(mock_storage_handler):
+    """Test in-memory state unchanged when storage update fails."""
+    # Configure storage to fail
+    mock_storage_handler.async_update_task.side_effect = ValueError(
+        "Storage update failed"
+    )
+
+    entity = TaskEntity(
+        story_id="test_story",
+        task_id="task_0",
+        title="Test Task",
+        description="Test",
+        storage_handler=mock_storage_handler,
+        state="todo",
+    )
+
+    original_state = entity.state
+
+    # Attempt update that will fail
+    with pytest.raises(ValueError):
+        await entity.async_update_state("progress")
+
+    # Verify in-memory state unchanged after failure
+    assert entity.state == original_state
+    assert entity.state == "todo"
+
+
+@pytest.mark.asyncio
+async def test_async_update_assignment_storage_failure_consistency(
+    mock_storage_handler,
+):
+    """Test in-memory assignment unchanged when storage update fails."""
+    # Configure storage to fail
+    mock_storage_handler.async_update_task.side_effect = ValueError(
+        "Storage update failed"
+    )
+
+    entity = TaskEntity(
+        story_id="test_story",
+        task_id="task_0",
+        title="Test Task",
+        description="Test",
+        storage_handler=mock_storage_handler,
+        state="todo",
+        assigned_to="person.john",
+    )
+
+    original_assignment = entity.assigned_to
+
+    # Attempt update that will fail
+    with pytest.raises(ValueError):
+        await entity.async_update_assignment("person.jane")
+
+    # Verify in-memory assignment unchanged after failure
+    assert entity.assigned_to == original_assignment
+    assert entity.assigned_to == "person.john"
+
+
+@pytest.mark.asyncio
+async def test_async_update_attributes_storage_failure_consistency(
+    mock_storage_handler,
+):
+    """Test in-memory attributes unchanged when storage update fails."""
+    # Configure storage to fail
+    mock_storage_handler.async_update_task.side_effect = ValueError(
+        "Storage update failed"
+    )
+
+    entity = TaskEntity(
+        story_id="test_story",
+        task_id="task_0",
+        title="Original Title",
+        description="Original Description",
+        storage_handler=mock_storage_handler,
+        state="todo",
+        assigned_to="person.john",
+        order=0,
+    )
+
+    # Save original values
+    original_title = entity.title
+    original_description = entity.description
+    original_state = entity.state
+    original_assigned_to = entity.assigned_to
+    original_order = entity.order
+
+    # Attempt update that will fail
+    with pytest.raises(ValueError):
+        await entity.async_update_attributes(
+            title="New Title",
+            description="New Description",
+            state="progress",
+            assigned_to="person.jane",
+            order=5,
+        )
+
+    # Verify ALL in-memory attributes unchanged after failure
+    assert entity.title == original_title
+    assert entity.description == original_description
+    assert entity.state == original_state
+    assert entity.assigned_to == original_assigned_to
+    assert entity.order == original_order

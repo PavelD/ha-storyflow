@@ -122,6 +122,13 @@ class StorageHandler:
             raise ValueError("Task data must include 'id' field")
 
         tasks = story_data.get("tasks", [])
+
+        # Prevent duplicate task IDs within the same story
+        if any(task.get("id") == task_data["id"] for task in tasks):
+            raise ValueError(
+                f"Task with id '{task_data['id']}' already exists in story '{story_id}'"
+            )
+
         tasks.append(task_data)
         story_data["tasks"] = tasks
 

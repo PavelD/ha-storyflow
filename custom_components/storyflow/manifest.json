@@ -6,10 +6,10 @@
     ],
     "config_flow": true,
     "dependencies": [],
-    "documentation": "https://github.com/PavelD/hacs-storyflow-itegration/",
+    "documentation": "https://github.com/PavelD/ha-storyflow/",
     "integration_type": "service",
     "iot_class": "assumed_state",
-    "issue_tracker": "https://github.com/PavelD/hacs-storyflow-itegration/issues",
+    "issue_tracker": "https://github.com/PavelD/ha-storyflow/issues",
     "requirements": [],
     "version": "0.0.1"    
 }

@@ -1,7 +1,8 @@
 # StoryFlow - Home Assistant Custom Integration
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
-[![License](https://img.shields.io/github/license/PavelD/hacs-storyflow-itegration)](LICENSE)
+[![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+![GitHub release](https://img.shields.io/github/v/release/PavelD/ha-storyflow)
+![GitHub license](https://img.shields.io/github/license/PavelD/ha-storyflow)
 
 **Track your projects and tasks right in Home Assistant!**
 
@@ -97,7 +98,7 @@ StoryFlow aims to bring agile project management capabilities to Home Assistant.
 1. Open **HACS** in Home Assistant
 2. Click on **Integrations**
 3. Click the **⋮** menu (top-right) → **Custom repositories**
-4. Add repository URL: `https://github.com/PavelD/hacs-storyflow-itegration`
+4. Add repository URL: `https://github.com/PavelD/ha-storyflow`
 5. Select category: **Integration**
 6. Click **Add**
 7. Search for "**StoryFlow**" and click **Download**
@@ -105,7 +106,7 @@ StoryFlow aims to bring agile project management capabilities to Home Assistant.
 
 ### Manual Installation
 
-1. Download the latest release from [GitHub Releases](https://github.com/PavelD/hacs-storyflow-itegration/releases)
+1. Download the latest release from [GitHub Releases](https://github.com/PavelD/ha-storyflow/releases)
 2. Extract and copy `custom_components/storyflow` to your Home Assistant `config/custom_components/` directory
 3. Restart Home Assistant
 
@@ -244,8 +245,8 @@ Interested in contributing? This integration is actively developed with high-qua
 
 ```bash
 # Clone and set up
-git clone https://github.com/PavelD/hacs-storyflow-itegration.git
-cd hacs-storyflow-itegration
+git clone https://github.com/PavelD/ha-storyflow.git
+cd ha-storyflow
 pip install -r requirements_tests.txt
 
 # Run tests
@@ -254,10 +255,6 @@ pytest
 # Check your changes
 pytest --cov=custom_components.storyflow
 ```
-
-See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed development roadmap and technical architecture.
-
----
 
 ## 🗺️ Planned Features
 
@@ -324,8 +321,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/PavelD/hacs-storyflow-itegration/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/PavelD/hacs-storyflow-itegration/discussions)
+- **Issues**: [GitHub Issues](https://github.com/PavelD/ha-storyflow/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/PavelD/ha-storyflow/discussions)
 
 ---
 

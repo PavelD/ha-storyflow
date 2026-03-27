@@ -13,6 +13,7 @@ from custom_components.storyflow.services import (
     SERVICE_CLONE_STORY,
 )
 from custom_components.storyflow.const import DOMAIN, TASK_STATES
+from custom_components.storyflow.exceptions import TaskNotFoundError
 
 
 @pytest.fixture
@@ -82,7 +83,7 @@ async def test_set_task_state_task_not_found(hass: HomeAssistant):
     await async_setup_services(hass)
 
     # Call service with non-existent task
-    with pytest.raises(ValueError, match="Task 'nonexistent_task' not found"):
+    with pytest.raises(TaskNotFoundError, match="Task 'nonexistent_task' not found"):
         await hass.services.async_call(
             DOMAIN,
             SERVICE_SET_STATE,
@@ -295,7 +296,7 @@ async def test_assign_task_not_found(hass: HomeAssistant):
     await async_setup_services(hass)
 
     # Call service with non-existent task
-    with pytest.raises(ValueError, match="Task 'nonexistent_task' not found"):
+    with pytest.raises(TaskNotFoundError, match="Task 'nonexistent_task' not found"):
         await hass.services.async_call(
             DOMAIN,
             SERVICE_ASSIGN,

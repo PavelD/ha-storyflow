@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant, ServiceCall
 import homeassistant.helpers.config_validation as cv
 
 from .const import DOMAIN, TASK_STATES
+from .exceptions import TaskNotFoundError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,9 +56,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             # Find task entity from the registry
             task_entity = hass.data[DOMAIN]["task_entities"].get(task_id)
             if task_entity is None:
-                error_msg = f"Task '{task_id}' not found"
-                _LOGGER.error(error_msg)
-                raise ValueError(error_msg)
+                _LOGGER.error("Task '%s' not found", task_id)
+                raise TaskNotFoundError(task_id)
 
             try:
                 # Update task state (persists to storage)
@@ -79,9 +79,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             # Find task entity from the registry
             task_entity = hass.data[DOMAIN]["task_entities"].get(task_id)
             if task_entity is None:
-                error_msg = f"Task '{task_id}' not found"
-                _LOGGER.error(error_msg)
-                raise ValueError(error_msg)
+                _LOGGER.error("Task '%s' not found", task_id)
+                raise TaskNotFoundError(task_id)
 
             try:
                 # Update assignment (persists to storage)

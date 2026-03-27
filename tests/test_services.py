@@ -339,20 +339,26 @@ async def test_unload_services(hass: HomeAssistant):
     assert not hass.services.has_service(DOMAIN, SERVICE_CLONE_STORY)
 
 
-async def test_all_task_states_valid(hass: HomeAssistant):
+async def test_all_task_states_valid(hass: HomeAssistant, mock_task_entity):
     """Test that all defined task states are accepted."""
-    hass.data[DOMAIN] = {"service_ref_count": 0}
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {"test_task": mock_task_entity},
+    }
     await async_setup_services(hass)
 
-    with patch("custom_components.storyflow.services._LOGGER"):
-        for state in TASK_STATES:
-            await hass.services.async_call(
-                DOMAIN,
-                SERVICE_SET_STATE,
-                {"task_id": "test_task", "new_state": state},
-                blocking=True,
-            )
-            # If we get here without exception, the state was valid
+    for state in TASK_STATES:
+        mock_task_entity.async_update_state.reset_mock()
+
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_STATE,
+            {"task_id": "test_task", "new_state": state},
+            blocking=True,
+        )
+
+        # Verify the state was passed to the entity
+        mock_task_entity.async_update_state.assert_called_once_with(state)
 
 
 async def test_service_reference_counting_multiple_entries(hass: HomeAssistant):

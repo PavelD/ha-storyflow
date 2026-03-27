@@ -25,7 +25,7 @@ async def async_setup(hass: HomeAssistant, config: dict):
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up from config entry."""
     storage = StorageHandler(hass)
-    manager = StoryManager(storage)
+    manager = StoryManager(storage, hass)
 
     story_name = entry.data.get("story_name")
     story_desc = entry.data.get("story_description", "")

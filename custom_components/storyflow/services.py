@@ -72,10 +72,27 @@ async def async_setup_services(hass: HomeAssistant) -> None:
         async def assign_service(call: ServiceCall) -> None:
             """Assign task to person."""
             task_id = call.data["task_id"]
-            person_id = call.data.get("person_id")
+            person_id = call.data.get("person_id")  # None = unassign
 
-            # TODO: Implement - find task entity and update assigned_to
-            _LOGGER.info(f"Assigning task {task_id} to {person_id}")
+            _LOGGER.debug("Service call: assign_task for %s to %s", task_id, person_id)
+
+            # Find task entity from the registry
+            task_entity = hass.data[DOMAIN]["task_entities"].get(task_id)
+            if task_entity is None:
+                error_msg = f"Task '{task_id}' not found"
+                _LOGGER.error(error_msg)
+                raise ValueError(error_msg)
+
+            try:
+                # Update assignment (persists to storage)
+                await task_entity.async_update_assignment(person_id)
+                action = (
+                    "unassigned" if person_id is None else f"assigned to {person_id}"
+                )
+                _LOGGER.info("Successfully %s task %s", action, task_id)
+            except ValueError as err:
+                _LOGGER.error("Failed to assign task %s: %s", task_id, err)
+                raise
 
         async def clone_story_service(call: ServiceCall) -> None:
             """Clone a story."""

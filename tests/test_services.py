@@ -246,12 +246,77 @@ async def test_set_task_state_missing_fields(hass: HomeAssistant):
         )
 
 
-async def test_assign_task_valid(hass: HomeAssistant):
-    """Test assign_task service with valid data."""
-    hass.data[DOMAIN] = {"service_ref_count": 0}
+async def test_assign_task_updates_entity(hass: HomeAssistant, mock_task_entity):
+    """Test that assign_task actually updates the entity."""
+    # Setup
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {"test_task_1": mock_task_entity},
+    }
     await async_setup_services(hass)
 
-    with patch("custom_components.storyflow.services._LOGGER") as mock_logger:
+    # Call service
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_ASSIGN,
+        {"task_id": "test_task_1", "person_id": "person.john"},
+        blocking=True,
+    )
+
+    # Verify entity was updated
+    mock_task_entity.async_update_assignment.assert_called_once_with("person.john")
+
+
+async def test_assign_task_unassign(hass: HomeAssistant, mock_task_entity):
+    """Test that assign_task with None unassigns the task."""
+    # Setup
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {"test_task_1": mock_task_entity},
+    }
+    await async_setup_services(hass)
+
+    # Call service without person_id (should unassign)
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_ASSIGN,
+        {"task_id": "test_task_1"},
+        blocking=True,
+    )
+
+    # Verify entity was updated with None
+    mock_task_entity.async_update_assignment.assert_called_once_with(None)
+
+
+async def test_assign_task_not_found(hass: HomeAssistant):
+    """Test assign_task service with non-existent task."""
+    # Setup with empty task registry
+    hass.data[DOMAIN] = {"service_ref_count": 0, "task_entities": {}}
+    await async_setup_services(hass)
+
+    # Call service with non-existent task
+    with pytest.raises(ValueError, match="Task 'nonexistent_task' not found"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_ASSIGN,
+            {"task_id": "nonexistent_task", "person_id": "person.john"},
+            blocking=True,
+        )
+
+
+async def test_assign_task_storage_failure(hass: HomeAssistant, mock_task_entity):
+    """Test assign_task handles storage failure gracefully."""
+    # Setup entity that raises ValueError on update
+    mock_task_entity.async_update_assignment.side_effect = ValueError("Storage error")
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {"test_task_1": mock_task_entity},
+    }
+    await async_setup_services(hass)
+
+    # Call service should propagate the error
+    with pytest.raises(ValueError, match="Storage error"):
         await hass.services.async_call(
             DOMAIN,
             SERVICE_ASSIGN,
@@ -259,19 +324,84 @@ async def test_assign_task_valid(hass: HomeAssistant):
             blocking=True,
         )
 
-        # Verify the service was called and logged
-        mock_logger.info.assert_called_once()
-        assert "test_task_1" in str(mock_logger.info.call_args)
-        assert "person.john" in str(mock_logger.info.call_args)
+
+async def test_assign_task_multiple_stories(hass: HomeAssistant):
+    """Test assign_task works across multiple stories."""
+    # Create tasks from different stories
+    task1 = MagicMock()
+    task1.task_id = "story1_task_0"
+    task1.story_id = "story1"
+    task1.async_update_assignment = AsyncMock()
+
+    task2 = MagicMock()
+    task2.task_id = "story2_task_0"
+    task2.story_id = "story2"
+    task2.async_update_assignment = AsyncMock()
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {
+            "story1_task_0": task1,
+            "story2_task_0": task2,
+        },
+    }
+    await async_setup_services(hass)
+
+    # Assign task from story1
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_ASSIGN,
+        {"task_id": "story1_task_0", "person_id": "person.alice"},
+        blocking=True,
+    )
+
+    task1.async_update_assignment.assert_called_once_with("person.alice")
+    task2.async_update_assignment.assert_not_called()
+
+    # Assign task from story2
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_ASSIGN,
+        {"task_id": "story2_task_0", "person_id": "person.bob"},
+        blocking=True,
+    )
+
+    task2.async_update_assignment.assert_called_once_with("person.bob")
 
 
-async def test_assign_task_optional_person(hass: HomeAssistant):
-    """Test assign_task service with optional person_id."""
-    hass.data[DOMAIN] = {"service_ref_count": 0}
+async def test_assign_task_logging(hass: HomeAssistant, mock_task_entity):
+    """Test that assign_task logs appropriately."""
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {"test_task_1": mock_task_entity},
+    }
     await async_setup_services(hass)
 
     with patch("custom_components.storyflow.services._LOGGER") as mock_logger:
-        # person_id is optional, so this should work
+        # Test assignment
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_ASSIGN,
+            {"task_id": "test_task_1", "person_id": "person.john"},
+            blocking=True,
+        )
+
+        # Verify debug and info logging
+        mock_logger.debug.assert_called_once()
+        mock_logger.info.assert_called_once()
+
+        # Verify log messages contain task_id and person
+        debug_call = str(mock_logger.debug.call_args)
+        assert "test_task_1" in debug_call
+        assert "person.john" in debug_call
+
+        info_call = str(mock_logger.info.call_args)
+        assert "test_task_1" in info_call
+        assert "assigned to person.john" in info_call
+
+        # Reset mocks and test unassignment
+        mock_logger.reset_mock()
+
         await hass.services.async_call(
             DOMAIN,
             SERVICE_ASSIGN,
@@ -279,8 +409,9 @@ async def test_assign_task_optional_person(hass: HomeAssistant):
             blocking=True,
         )
 
-        # Verify the service was called
-        mock_logger.info.assert_called_once()
+        # Verify unassignment logging
+        info_call = str(mock_logger.info.call_args)
+        assert "unassigned" in info_call
 
 
 async def test_clone_story_valid(hass: HomeAssistant):

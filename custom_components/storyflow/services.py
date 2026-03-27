@@ -14,6 +14,7 @@ _LOGGER = logging.getLogger(__name__)
 
 SERVICE_SET_STATE = "set_task_state"
 SERVICE_ASSIGN = "assign_task"
+SERVICE_ADD_TASK = "add_task"
 SERVICE_CLONE_STORY = "clone_story"
 
 SET_STATE_SCHEMA = vol.Schema(
@@ -27,6 +28,16 @@ ASSIGN_SCHEMA = vol.Schema(
     {
         vol.Required("task_id"): cv.string,
         vol.Optional("person_id"): cv.string,
+    }
+)
+
+ADD_TASK_SCHEMA = vol.Schema(
+    {
+        vol.Required("story_id"): cv.string,
+        vol.Required("title"): cv.string,
+        vol.Optional("description"): cv.string,
+        vol.Optional("assigned_to"): cv.string,
+        vol.Optional("state", default="todo"): vol.In(TASK_STATES),
     }
 )
 

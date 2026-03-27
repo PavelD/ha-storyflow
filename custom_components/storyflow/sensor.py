@@ -31,7 +31,7 @@ async def async_setup_entry(
     # Create progress sensor for the story
     sensors = [StoryProgressEntity(story_id, tasks)]
 
-    # Create task entities
+    # Create task entities and register them in the entity lookup
     for idx, task in enumerate(tasks):
         task_id = f"{story_id}_task_{idx}"
         task_entity = TaskEntity(
@@ -45,6 +45,9 @@ async def async_setup_entry(
             order=idx,
         )
         sensors.append(task_entity)
+
+        # Register task entity in the global lookup dictionary
+        hass.data[DOMAIN]["task_entities"][task_id] = task_entity
 
     async_add_entities(sensors)
 

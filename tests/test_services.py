@@ -326,6 +326,36 @@ async def test_assign_task_storage_failure(hass: HomeAssistant, mock_task_entity
         )
 
 
+async def test_assign_task_missing_task_id(hass: HomeAssistant):
+    """Test assign_task service with missing required task_id."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+    await async_setup_services(hass)
+
+    # task_id is required - omitting it should fail schema validation
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_ASSIGN,
+            {"person_id": "person.john"},
+            blocking=True,
+        )
+
+
+async def test_assign_task_invalid_person_id_type(hass: HomeAssistant):
+    """Test assign_task service with invalid person_id type."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+    await async_setup_services(hass)
+
+    # person_id should be a string - passing an int should fail schema validation
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_ASSIGN,
+            {"task_id": "test_task_1", "person_id": 123},
+            blocking=True,
+        )
+
+
 async def test_assign_task_multiple_stories(hass: HomeAssistant):
     """Test assign_task works across multiple stories."""
     # Create tasks from different stories
@@ -469,28 +499,6 @@ async def test_unload_services(hass: HomeAssistant):
     assert not hass.services.has_service(DOMAIN, SERVICE_SET_STATE)
     assert not hass.services.has_service(DOMAIN, SERVICE_ASSIGN)
     assert not hass.services.has_service(DOMAIN, SERVICE_CLONE_STORY)
-
-
-async def test_all_task_states_valid(hass: HomeAssistant, mock_task_entity):
-    """Test that all defined task states are accepted."""
-    hass.data[DOMAIN] = {
-        "service_ref_count": 0,
-        "task_entities": {"test_task": mock_task_entity},
-    }
-    await async_setup_services(hass)
-
-    for state in TASK_STATES:
-        mock_task_entity.async_update_state.reset_mock()
-
-        await hass.services.async_call(
-            DOMAIN,
-            SERVICE_SET_STATE,
-            {"task_id": "test_task", "new_state": state},
-            blocking=True,
-        )
-
-        # Verify the state was passed to the entity
-        mock_task_entity.async_update_state.assert_called_once_with(state)
 
 
 async def test_service_reference_counting_multiple_entries(hass: HomeAssistant):

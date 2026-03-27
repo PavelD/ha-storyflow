@@ -54,7 +54,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             )
 
             # Find task entity from the registry
-            task_entity = hass.data[DOMAIN]["task_entities"].get(task_id)
+            task_entity = hass.data[DOMAIN].get("task_entities", {}).get(task_id)
             if task_entity is None:
                 _LOGGER.error("Task '%s' not found", task_id)
                 raise TaskNotFoundError(task_id)
@@ -77,7 +77,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.debug("Service call: assign_task for %s to %s", task_id, person_id)
 
             # Find task entity from the registry
-            task_entity = hass.data[DOMAIN]["task_entities"].get(task_id)
+            task_entity = hass.data[DOMAIN].get("task_entities", {}).get(task_id)
             if task_entity is None:
                 _LOGGER.error("Task '%s' not found", task_id)
                 raise TaskNotFoundError(task_id)

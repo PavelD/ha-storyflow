@@ -7,6 +7,7 @@ import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
 import homeassistant.helpers.config_validation as cv
 
+from . import get_task_entity
 from .const import DOMAIN, TASK_STATES
 
 _LOGGER = logging.getLogger(__name__)
@@ -48,9 +49,26 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             task_id = call.data["task_id"]
             new_state = call.data["new_state"]
 
-            # TODO: Implement - find task entity and update state
-            # For now, log the call
-            _LOGGER.info(f"Setting task {task_id} to state {new_state}")
+            _LOGGER.debug(
+                "Service call: set_task_state for %s to %s", task_id, new_state
+            )
+
+            # Find task entity
+            task_entity = get_task_entity(hass, task_id)
+            if task_entity is None:
+                error_msg = f"Task '{task_id}' not found"
+                _LOGGER.error(error_msg)
+                raise ValueError(error_msg)
+
+            try:
+                # Update task state (persists to storage)
+                await task_entity.async_update_state(new_state)
+                _LOGGER.info(
+                    "Successfully updated task %s to state %s", task_id, new_state
+                )
+            except ValueError as err:
+                _LOGGER.error("Failed to update task %s: %s", task_id, err)
+                raise
 
         async def assign_service(call: ServiceCall) -> None:
             """Assign task to person."""

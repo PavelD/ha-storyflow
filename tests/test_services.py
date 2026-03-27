@@ -1,7 +1,7 @@
 """Test StoryFlow services."""
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 import voluptuous as vol
 
 from homeassistant.core import HomeAssistant
@@ -13,6 +13,32 @@ from custom_components.storyflow.services import (
     SERVICE_CLONE_STORY,
 )
 from custom_components.storyflow.const import DOMAIN, TASK_STATES
+
+
+@pytest.fixture
+def mock_task_entity():
+    """Create a mock task entity."""
+    entity = MagicMock()
+    entity.task_id = "test_task_1"
+    entity.story_id = "test_story"
+    entity._state = "todo"
+    entity.async_update_state = AsyncMock()
+    entity.async_update_assignment = AsyncMock()
+    entity.async_write_ha_state = MagicMock()
+
+    # Mock state property
+    type(entity).state = property(lambda self: self._state)
+
+    return entity
+
+
+@pytest.fixture
+def mock_storage_handler():
+    """Create a mock storage handler."""
+    storage = MagicMock()
+    storage.async_update_task = AsyncMock()
+    storage.async_load_all_stories = AsyncMock(return_value={})
+    return storage
 
 
 async def test_services_registered(hass: HomeAssistant):
@@ -28,9 +54,136 @@ async def test_services_registered(hass: HomeAssistant):
     assert hass.services.has_service(DOMAIN, SERVICE_CLONE_STORY)
 
 
-async def test_set_task_state_valid(hass: HomeAssistant):
-    """Test set_task_state service with valid data."""
-    hass.data[DOMAIN] = {"service_ref_count": 0}
+async def test_set_task_state_updates_entity(hass: HomeAssistant, mock_task_entity):
+    """Test that set_task_state actually updates the entity."""
+    # Setup
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {"test_task_1": mock_task_entity},
+    }
+    await async_setup_services(hass)
+
+    # Call service
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_SET_STATE,
+        {"task_id": "test_task_1", "new_state": "done"},
+        blocking=True,
+    )
+
+    # Verify entity was updated
+    mock_task_entity.async_update_state.assert_called_once_with("done")
+
+
+async def test_set_task_state_task_not_found(hass: HomeAssistant):
+    """Test set_task_state service with non-existent task."""
+    # Setup with empty task registry
+    hass.data[DOMAIN] = {"service_ref_count": 0, "task_entities": {}}
+    await async_setup_services(hass)
+
+    # Call service with non-existent task
+    with pytest.raises(ValueError, match="Task 'nonexistent_task' not found"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_STATE,
+            {"task_id": "nonexistent_task", "new_state": "done"},
+            blocking=True,
+        )
+
+
+async def test_set_task_state_storage_failure(hass: HomeAssistant, mock_task_entity):
+    """Test set_task_state handles storage failure gracefully."""
+    # Setup entity that raises ValueError on update
+    mock_task_entity.async_update_state.side_effect = ValueError("Storage error")
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {"test_task_1": mock_task_entity},
+    }
+    await async_setup_services(hass)
+
+    # Call service should propagate the error
+    with pytest.raises(ValueError, match="Storage error"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_STATE,
+            {"task_id": "test_task_1", "new_state": "done"},
+            blocking=True,
+        )
+
+
+async def test_set_task_state_all_valid_states(hass: HomeAssistant, mock_task_entity):
+    """Test set_task_state with all valid task states."""
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {"test_task_1": mock_task_entity},
+    }
+    await async_setup_services(hass)
+
+    # Test each valid state
+    for state in TASK_STATES:
+        mock_task_entity.async_update_state.reset_mock()
+
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_SET_STATE,
+            {"task_id": "test_task_1", "new_state": state},
+            blocking=True,
+        )
+
+        mock_task_entity.async_update_state.assert_called_once_with(state)
+
+
+async def test_set_task_state_multiple_stories(hass: HomeAssistant, mock_task_entity):
+    """Test set_task_state works across multiple stories."""
+    # Create tasks from different stories
+    task1 = MagicMock()
+    task1.task_id = "story1_task_0"
+    task1.story_id = "story1"
+    task1.async_update_state = AsyncMock()
+
+    task2 = MagicMock()
+    task2.task_id = "story2_task_0"
+    task2.story_id = "story2"
+    task2.async_update_state = AsyncMock()
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {
+            "story1_task_0": task1,
+            "story2_task_0": task2,
+        },
+    }
+    await async_setup_services(hass)
+
+    # Update task from story1
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_SET_STATE,
+        {"task_id": "story1_task_0", "new_state": "done"},
+        blocking=True,
+    )
+
+    task1.async_update_state.assert_called_once_with("done")
+    task2.async_update_state.assert_not_called()
+
+    # Update task from story2
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_SET_STATE,
+        {"task_id": "story2_task_0", "new_state": "progress"},
+        blocking=True,
+    )
+
+    task2.async_update_state.assert_called_once_with("progress")
+
+
+async def test_set_task_state_logging(hass: HomeAssistant, mock_task_entity):
+    """Test that set_task_state logs appropriately."""
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {"test_task_1": mock_task_entity},
+    }
     await async_setup_services(hass)
 
     with patch("custom_components.storyflow.services._LOGGER") as mock_logger:
@@ -41,10 +194,18 @@ async def test_set_task_state_valid(hass: HomeAssistant):
             blocking=True,
         )
 
-        # Verify the service was called and logged
+        # Verify debug and info logging
+        mock_logger.debug.assert_called_once()
         mock_logger.info.assert_called_once()
-        assert "test_task_1" in str(mock_logger.info.call_args)
-        assert "done" in str(mock_logger.info.call_args)
+
+        # Verify log messages contain task_id and state
+        debug_call = str(mock_logger.debug.call_args)
+        assert "test_task_1" in debug_call
+        assert "done" in debug_call
+
+        info_call = str(mock_logger.info.call_args)
+        assert "test_task_1" in info_call
+        assert "done" in info_call
 
 
 async def test_set_task_state_invalid_state(hass: HomeAssistant):

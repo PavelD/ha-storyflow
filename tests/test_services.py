@@ -341,17 +341,17 @@ async def test_assign_task_missing_task_id(hass: HomeAssistant):
         )
 
 
-async def test_assign_task_invalid_person_id_type(hass: HomeAssistant):
-    """Test assign_task service with invalid person_id type."""
-    hass.data[DOMAIN] = {"service_ref_count": 0}
+async def test_assign_task_invalid_task_id_type(hass: HomeAssistant):
+    """Test assign_task service with invalid task_id type (schema coerces but task not found)."""
+    hass.data[DOMAIN] = {"service_ref_count": 0, "task_entities": {}}
     await async_setup_services(hass)
 
-    # person_id should be a string - passing an int should fail schema validation
-    with pytest.raises(vol.Invalid):
+    # task_id as int will be coerced to string by cv.string, but task won't be found
+    with pytest.raises(TaskNotFoundError):
         await hass.services.async_call(
             DOMAIN,
             SERVICE_ASSIGN,
-            {"task_id": "test_task_1", "person_id": 123},
+            {"task_id": 123, "person_id": "person.john"},
             blocking=True,
         )
 

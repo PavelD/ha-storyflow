@@ -28,11 +28,12 @@
 - Person assignment tracking
 - Comprehensive test coverage (90+ tests)
 
-#### 🔄 Milestone 3: Automation Support (In Progress - Next Release)
-- Services for Home Assistant automations
-- Update task states via automations
-- Assign tasks to people programmatically
-- Full documentation for service usage
+#### ✅ Milestone 3: Automation Support (Complete - v0.2.0-dev)
+- ✅ Services for Home Assistant automations
+- ✅ Update task states via automations (`set_task_state`)
+- ✅ Assign tasks to people programmatically (`assign_task`)
+- ✅ Comprehensive error handling with custom exceptions
+- ⏳ Full documentation in services.yaml (Phase 5)
 
 #### ⏳ Milestone 4: Task Management (Planned)
 - Add new tasks to existing stories
@@ -47,18 +48,21 @@
 
 ### 🎯 What You Can Do Now
 
-**✅ Available Today:**
+**✅ Available Today (v0.2.0-dev):**
 - ✨ Create stories for your home projects
 - 📋 Add tasks with descriptions and assignments
 - 📊 Monitor progress in Lovelace dashboards
 - 👥 Track who's responsible for each task
 - 🔄 View task states (todo, in progress, done)
+- 🤖 **NEW!** Update task states via automations
+- 👤 **NEW!** Assign/unassign tasks programmatically
+- ⚡ **NEW!** Trigger actions based on task changes
 
 **⏳ Coming Soon (Next Release):**
-- 🤖 Trigger automations based on task completion
-- ✏️ Modify tasks through Home Assistant services
+- ➕ Add new tasks to existing stories
+- 🗑️ Delete completed tasks  
+- ✏️ Edit task details (title, description)
 - 🔔 Send notifications when tasks change state
-- 📱 Integrate with mobile notifications
 
 **💡 Use Cases This Integration is Perfect For:**
 - 🏠 Home improvement project tracking
@@ -66,16 +70,6 @@
 - 📦 Moving checklist coordination
 - 🎉 Event planning and task delegation
 - 🎯 Personal goal tracking
-
-### ⚠️ Important Note
-
-**Services are not functional yet!** While you can create stories and view tasks, automation services will be enabled in the next release. This means:
-- ❌ You cannot modify tasks after story creation
-- ❌ Automations cannot interact with tasks yet
-- ❌ No programmatic task updates available
-
-**Why Release Now?** 
-We're sharing early to gather feedback and let users see the vision. The foundation is solid, and automation support is coming soon!
 
 ---
 
@@ -187,21 +181,85 @@ sensor.storyflow_kitchen_progress:
 
 ---
 
-## 🚧 Services (Planned, Not Implemented)
+## 🤖 Services
 
-The following services are registered but **do not perform any actions** in v0.0.1. They currently only log messages.
+### ✅ Available Services (v0.2.0-dev)
 
-### Registered but Non-Functional:
-- `storyflow.set_task_state` - Intended to change task states
-- `storyflow.assign_task` - Intended to assign tasks to persons
-- `storyflow.clone_story` - Intended to duplicate stories
+#### `storyflow.set_task_state`
+**Change the state of a task**
 
-### Planned for Future Versions:
+```yaml
+service: storyflow.set_task_state
+data:
+  task_id: "kitchen_task_0"
+  new_state: "done"
+```
+
+**Parameters:**
+- `task_id` (required): ID of the task to update
+- `new_state` (required): New state - `todo`, `progress`, `review`, `done`, or `rejected`
+
+**Example Automation:**
+```yaml
+automation:
+  - alias: "Mark task done at 9 AM"
+    trigger:
+      - platform: time
+        at: "09:00:00"
+    action:
+      - service: storyflow.set_task_state
+        data:
+          task_id: "morning_routine_task_0"
+          new_state: "done"
+```
+
+#### `storyflow.assign_task`
+**Assign or unassign a task to a person**
+
+```yaml
+# Assign task
+service: storyflow.assign_task
+data:
+  task_id: "kitchen_task_1"
+  person_id: "person.john"
+
+# Unassign task (omit person_id)
+service: storyflow.assign_task
+data:
+  task_id: "kitchen_task_1"
+```
+
+**Parameters:**
+- `task_id` (required): ID of the task to assign
+- `person_id` (optional): Person entity ID. Omit to unassign the task.
+
+**Example Automation:**
+```yaml
+automation:
+  - alias: "Auto-assign task to available person"
+    trigger:
+      - platform: state
+        entity_id: person.john
+        to: "home"
+    action:
+      - service: storyflow.assign_task
+        data:
+          task_id: "evening_chores_task_0"
+          person_id: "person.john"
+```
+
+### 🚧 Stub Services (Non-Functional)
+
+#### `storyflow.clone_story`
+**Clone a story** _(Planned for Phase 4)_
+
+Currently logs only. Will duplicate stories with reset tasks.
+
+### ⏳ Planned for Future Releases
+
 - `storyflow.add_task` - Add new tasks to stories
 - `storyflow.update_task` - Update task details
 - `storyflow.delete_task` - Remove tasks from stories
-
-**Note**: Until services are implemented, you cannot modify tasks after initial story creation.
 
 ---
 
@@ -237,7 +295,7 @@ name: Project Progress
 
 Interested in contributing? This integration is actively developed with high-quality standards:
 
-- **90+ automated tests** ensure reliability
+- **119 automated tests** ensure reliability
 - **~90% code coverage** for confidence in changes
 - **Python code quality** enforced with linting and formatting
 
@@ -328,7 +386,23 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📝 Version History
 
-### v0.0.1 (Current)
+### v0.2.0-dev (Current - In Development)
+- ✅ Functional automation services
+- ✅ `set_task_state` service - Update task states
+- ✅ `assign_task` service - Assign/unassign tasks
+- ✅ Custom exception framework for error handling
+- ✅ 119 automated tests with 90% coverage
+- ✅ Task state persistence across restarts
+- 🔄 Phase 2 Complete (30% overall progress)
+
+### v0.1.0-dev
+- Foundation complete (Phase 1)
+- Writable task entities
+- Storage system enhancements
+- Entity state management
+- 113 automated tests
+
+### v0.0.1
 - Initial release
 - MVP infrastructure
 - Display-only functionality

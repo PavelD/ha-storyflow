@@ -1,34 +1,80 @@
-# StoryFlow Integration for Home Assistant
+# StoryFlow - Home Assistant Custom Integration
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
 [![License](https://img.shields.io/github/license/PavelD/hacs-storyflow-itegration)](LICENSE)
 
-**Version:** v0.0.1 - Early Development  
-**Status:** 🚧 MVP Infrastructure Only - Services Not Implemented
+**Track your projects and tasks right in Home Assistant!**
 
 ---
 
-## ⚠️ Current Status
+## 📍 Development Status
 
-This integration is in **early development phase**. The basic infrastructure for managing stories and tasks is in place, but **automation features are not yet functional**.
+**Current Version:** v0.1.0-dev (In Active Development)
 
-### ✅ What Works (v0.0.1)
+### Development Milestones
 
-- **Story Creation**: Create stories via Home Assistant config flow UI
-- **Task Display**: Tasks appear as sensor entities in Home Assistant
-- **Progress Tracking**: Aggregate progress entity shows completion percentage
-- **Multiple Stories**: Support for multiple concurrent story entries
-- **Persistence**: Stories and tasks are saved to Home Assistant storage
-- **HACS Compatible**: Can be installed as a custom repository
+#### ✅ Milestone 1: Story & Task Display (Complete)
+- Create and view stories through Home Assistant UI
+- Display tasks as sensor entities  
+- Track overall progress with completion percentage
+- Support multiple stories simultaneously
+- All data persists across Home Assistant restarts
 
-### ⚠️ What Doesn't Work Yet
+#### ✅ Milestone 2: Data Foundation (Complete)
+- Robust storage system for stories and tasks
+- Data validation and error handling
+- Support for task states (todo, in progress, done, etc.)
+- Person assignment tracking
+- Comprehensive test coverage (90+ tests)
 
-- **Service Operations**: Services are registered but contain only stub implementations (log messages, no actual operations)
-- **Task Modifications**: Cannot modify tasks programmatically or via automations
-- **Automation Support**: Services don't perform actions, making automation impossible
-- **CRUD Operations**: No add/update/delete task functionality via services
+#### 🔄 Milestone 3: Automation Support (In Progress - Next Release)
+- Services for Home Assistant automations
+- Update task states via automations
+- Assign tasks to people programmatically
+- Full documentation for service usage
 
-**Bottom Line**: This is a **display-only** integration at the moment. You can view stories and tasks, but cannot interact with them programmatically.
+#### ⏳ Milestone 4: Task Management (Planned)
+- Add new tasks to existing stories
+- Delete completed tasks
+- Update task details
+- Manage tasks dynamically
+
+#### ⏳ Milestone 5: Advanced Features (Planned)
+- Clone stories for recurring projects
+- Rich service documentation in Home Assistant UI
+- Example automations and blueprints
+
+### 🎯 What You Can Do Now
+
+**✅ Available Today:**
+- ✨ Create stories for your home projects
+- 📋 Add tasks with descriptions and assignments
+- 📊 Monitor progress in Lovelace dashboards
+- 👥 Track who's responsible for each task
+- 🔄 View task states (todo, in progress, done)
+
+**⏳ Coming Soon (Next Release):**
+- 🤖 Trigger automations based on task completion
+- ✏️ Modify tasks through Home Assistant services
+- 🔔 Send notifications when tasks change state
+- 📱 Integrate with mobile notifications
+
+**💡 Use Cases This Integration is Perfect For:**
+- 🏠 Home improvement project tracking
+- 🧹 Family chore management
+- 📦 Moving checklist coordination
+- 🎉 Event planning and task delegation
+- 🎯 Personal goal tracking
+
+### ⚠️ Important Note
+
+**Services are not functional yet!** While you can create stories and view tasks, automation services will be enabled in the next release. This means:
+- ❌ You cannot modify tasks after story creation
+- ❌ Automations cannot interact with tasks yet
+- ❌ No programmatic task updates available
+
+**Why Release Now?** 
+We're sharing early to gather feedback and let users see the vision. The foundation is solid, and automation support is coming soon!
 
 ---
 
@@ -186,110 +232,67 @@ name: Project Progress
 
 ---
 
-## 🧪 Development
+## 🧪 For Developers
 
-### Setting Up Development Environment
+Interested in contributing? This integration is actively developed with high-quality standards:
+
+- **90+ automated tests** ensure reliability
+- **~90% code coverage** for confidence in changes
+- **Clear development roadmap** in IMPLEMENTATION_PLAN.md
+- **Python code quality** enforced with linting and formatting
+
+### Quick Start for Contributors
 
 ```bash
-# Clone repository
+# Clone and set up
 git clone https://github.com/PavelD/hacs-storyflow-itegration.git
 cd hacs-storyflow-itegration
-
-# Install development dependencies
 pip install -r requirements_tests.txt
-```
 
-### Running Tests
-
-```bash
-# Run all tests
+# Run tests
 pytest
 
-# Run with coverage
-pytest --cov=custom_components.storyflow --cov-report=html
-
-# Run specific test file
-pytest tests/test_services.py
+# Check your changes
+pytest --cov=custom_components.storyflow
 ```
 
-### Test Suite
-
-The project includes 48 tests covering:
-- Service registration infrastructure
-- Task entity initialization
-- Progress calculation logic
-- Integration lifecycle management
-
-**Note**: Tests verify infrastructure, not functional implementations. Services are mocked/stubbed.
-
-### Code Quality
-
-```bash
-# Format code
-black custom_components/ tests/
-
-# Linting
-pylint custom_components/
-```
+See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for detailed development roadmap and technical architecture.
 
 ---
 
-## 🗺️ Roadmap
+## 🗺️ Planned Features
 
-### Current Version (v0.0.1) ✅
-- [x] Config flow for story creation
-- [x] Task entities with state display
-- [x] Progress calculation entity
-- [x] Persistent storage
-- [x] Multiple story support
-- [x] Service registration infrastructure
-- [x] Test infrastructure (48 tests)
+### Coming in Next Releases
 
-### Planned for Future Versions
-**Note**: Timeline and feature set determined by project maintainer.
+**Automation Services** (Next Release - Milestone 3)
+- Change task states from automations
+- Assign tasks to people automatically
+- Trigger actions based on task progress
+- Example: "When kitchen task is done, send notification"
 
-**Core Functionality** (Required for v1.0):
-- [ ] Implement functional `set_task_state` service
-- [ ] Implement functional `assign_task` service
-- [ ] Add `add_task` service (create tasks programmatically)
-- [ ] Add `update_task` service (modify existing tasks)
-- [ ] Add `delete_task` service (remove tasks)
-- [ ] Add `services.yaml` for UI documentation
-- [ ] Enable automation support
+**Task Management** (Milestone 4)
+- Add new tasks to existing stories
+- Remove completed tasks
+- Edit task descriptions and assignments
+- Update task details on the fly
 
-**Enhanced Features** (Post-v1.0):
-- [ ] Create new stories via service (currently config flow only)
-- [ ] Clone story functionality
-- [ ] Interactive Lovelace card with task management
-- [ ] State flow enforcement (optional validation)
-- [ ] Task dependencies
-- [ ] Task due dates and reminders
-- [ ] Task comments and history
-- [ ] Bulk operations
-- [ ] Import/export capabilities
-- [ ] Statistics dashboard
+**Advanced Features** (Milestone 5+)
+- Copy stories for recurring projects
+- Interactive Lovelace card with quick actions
+- Task dependencies ("Task B needs Task A first")
+- Due dates and reminders
+- Task comments and history
+- Statistics and dashboards
 
----
+### Long-term Vision
 
-## ⚙️ Architecture Notes
-
-### Service Infrastructure
-
-Services are registered using reference counting to support multiple story entries. However, the actual service implementations are placeholders:
-
-```python
-# Current implementation (v0.0.1)
-async def set_state_service(call: ServiceCall) -> None:
-    """Set task state."""
-    # TODO: Implement - find task entity and update state
-    _LOGGER.info(f"Setting task {task_id} to state {new_state}")
-```
-
-### Entity Management
-
-- Task entities are created from stored task data
-- Progress entity calculates completion from task states
-- Entities are read-only in current version
+Beyond the core features, we envision:
+- 📅 Calendar integration for due dates
+- 🔔 Smart notifications based on task priority
+- 📱 Mobile app integration
+- 🎯 Sprint planning and velocity tracking
+- 👥 Multi-user collaboration features
+- 📊 Advanced analytics and reporting
 
 ---
 

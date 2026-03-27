@@ -238,7 +238,6 @@ Interested in contributing? This integration is actively developed with high-qua
 
 - **90+ automated tests** ensure reliability
 - **~90% code coverage** for confidence in changes
-- **Clear development roadmap** in IMPLEMENTATION_PLAN.md
 - **Python code quality** enforced with linting and formatting
 
 ### Quick Start for Contributors

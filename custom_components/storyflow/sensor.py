@@ -16,6 +16,10 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> bool:
     """Set up StoryFlow sensor entities."""
+    # Get storage handler from hass.data
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    storage_handler = entry_data["storage"]
+
     # Prefer persisted story_id; fall back to legacy derivation for existing entries
     story_id = entry.data.get("story_id")
     if story_id is None:
@@ -27,7 +31,7 @@ async def async_setup_entry(
     # Create progress sensor for the story
     sensors = [StoryProgressEntity(story_id, tasks)]
 
-    # Create task entities
+    # Create task entities and register them in the entity lookup
     for idx, task in enumerate(tasks):
         task_id = f"{story_id}_task_{idx}"
         task_entity = TaskEntity(
@@ -35,11 +39,15 @@ async def async_setup_entry(
             task_id=task_id,
             title=task["title"],
             description=task["description"],
+            storage_handler=storage_handler,
             assigned_to=task.get("assigned_to"),
             state=task.get("state", "todo"),
             order=idx,
         )
         sensors.append(task_entity)
+
+        # Register task entity in the global lookup dictionary
+        hass.data[DOMAIN]["task_entities"][task_id] = task_entity
 
     async_add_entities(sensors)
 

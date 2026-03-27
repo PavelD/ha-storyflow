@@ -1,0 +1,62 @@
+# StoryFlow Services
+set_task_state:
+  name: Set Task State
+  description: Update the state of a task
+  fields:
+    task_id:
+      name: Task ID
+      description: The unique identifier of the task
+      required: true
+      example: "storyflow_my_story_task_0"
+      selector:
+        text:
+    new_state:
+      name: New State
+      description: The new state for the task
+      required: true
+      example: "progress"
+      selector:
+        select:
+          options:
+            - "todo"
+            - "progress"
+            - "done"
+
+assign_task:
+  name: Assign Task
+  description: Assign a task to a person
+  fields:
+    task_id:
+      name: Task ID
+      description: The unique identifier of the task
+      required: true
+      example: "storyflow_my_story_task_0"
+      selector:
+        text:
+    person_id:
+      name: Person ID
+      description: The entity ID of the person to assign (leave empty to unassign)
+      required: false
+      example: "person.john"
+      selector:
+        entity:
+          domain: person
+
+clone_story:
+  name: Clone Story
+  description: Create a copy of a story with reset tasks
+  fields:
+    story_id:
+      name: Story ID
+      description: The identifier of the story to clone
+      required: true
+      example: "my_story"
+      selector:
+        text:
+    new_story_name:
+      name: New Story Name
+      description: Name for the cloned story (optional)
+      required: false
+      example: "My Story (Copy)"
+      selector:
+        text:

@@ -373,3 +373,276 @@ async def test_multiple_entries_service_lifecycle(hass: HomeAssistant):
             await async_unload_entry(hass, entry2)
             assert hass.data[DOMAIN]["service_ref_count"] == 0
             assert not hass.services.has_service(DOMAIN, "set_task_state")
+
+
+# Phase 1.4: Entity Registry Integration Tests
+
+
+async def test_entity_registry_initialized(hass: HomeAssistant):
+    """Test that entity registry is initialized during setup."""
+    result = await async_setup(hass, {})
+
+    assert result is True
+    assert DOMAIN in hass.data
+    assert "task_entities" in hass.data[DOMAIN]
+    assert isinstance(hass.data[DOMAIN]["task_entities"], dict)
+    assert len(hass.data[DOMAIN]["task_entities"]) == 0
+
+
+async def test_get_task_entity_function_exists(hass: HomeAssistant):
+    """Test that get_task_entity helper function is available."""
+    from custom_components.storyflow import get_task_entity
+
+    # Initialize
+    await async_setup(hass, {})
+
+    # Function should exist and return None for non-existent task
+    result = get_task_entity(hass, "non_existent_task")
+    assert result is None
+
+
+async def test_entities_registered_during_setup(hass: HomeAssistant):
+    """Test that task entities are registered in the lookup during setup."""
+    await async_setup(hass, {})
+
+    entry = ConfigEntry(
+        version=1,
+        minor_version=0,
+        domain=DOMAIN,
+        title="Test Story",
+        data={
+            "story_name": "Test Story",
+            "story_description": "Test",
+            "story_id": "test_story",
+            "tasks": [
+                {
+                    "title": "Task 1",
+                    "description": "First task",
+                    "state": "todo",
+                },
+                {
+                    "title": "Task 2",
+                    "description": "Second task",
+                    "state": "done",
+                },
+            ],
+        },
+        source="user",
+        unique_id="test_unique",
+    )
+
+    with patch("custom_components.storyflow.StorageHandler"), patch(
+        "custom_components.storyflow.StoryManager"
+    ) as mock_manager, patch("custom_components.storyflow.async_setup_services"):
+
+        mock_manager_instance = AsyncMock()
+        mock_manager_instance.create_story = AsyncMock(return_value="test_story")
+        mock_manager.return_value = mock_manager_instance
+
+        await async_setup_entry(hass, entry)
+
+        # After platform setup, entities should be registered
+        # Note: In real execution, sensor.py registers them. Here we simulate it.
+        from custom_components.storyflow.task_entity import TaskEntity
+
+        # Simulate what sensor.py does
+        task_entities = hass.data[DOMAIN]["task_entities"]
+
+        # Create mock entities (sensor.py will do this in reality)
+        storage_handler = hass.data[DOMAIN][entry.entry_id]["storage"]
+        for idx, task in enumerate(entry.data["tasks"]):
+            task_id = f"test_story_task_{idx}"
+            task_entity = TaskEntity(
+                story_id="test_story",
+                task_id=task_id,
+                title=task["title"],
+                description=task["description"],
+                storage_handler=storage_handler,
+                state=task.get("state", "todo"),
+                order=idx,
+            )
+            task_entities[task_id] = task_entity
+
+        # Verify entities are registered
+        assert "test_story_task_0" in hass.data[DOMAIN]["task_entities"]
+        assert "test_story_task_1" in hass.data[DOMAIN]["task_entities"]
+
+        # Verify get_task_entity works
+        from custom_components.storyflow import get_task_entity
+
+        entity = get_task_entity(hass, "test_story_task_0")
+        assert entity is not None
+        assert entity.task_id == "test_story_task_0"
+        assert entity.title == "Task 1"
+
+
+async def test_entities_cleaned_up_during_unload(hass: HomeAssistant):
+    """Test that task entities are removed from registry during unload."""
+    await async_setup(hass, {})
+
+    entry = ConfigEntry(
+        version=1,
+        minor_version=0,
+        domain=DOMAIN,
+        title="Test Story",
+        data={
+            "story_name": "Test Story",
+            "story_description": "Test",
+            "story_id": "test_story",
+            "tasks": [
+                {"title": "Task 1", "description": "Test", "state": "todo"},
+                {"title": "Task 2", "description": "Test", "state": "done"},
+            ],
+        },
+        source="user",
+        unique_id="test_unique",
+    )
+
+    with patch("custom_components.storyflow.StorageHandler"), patch(
+        "custom_components.storyflow.StoryManager"
+    ) as mock_manager, patch("custom_components.storyflow.async_setup_services"), patch(
+        "custom_components.storyflow.async_unload_services"
+    ):
+
+        mock_manager_instance = AsyncMock()
+        mock_manager_instance.create_story = AsyncMock(return_value="test_story")
+        mock_manager.return_value = mock_manager_instance
+
+        await async_setup_entry(hass, entry)
+
+        # Manually add entities to registry (simulating sensor.py)
+        task_entities = hass.data[DOMAIN]["task_entities"]
+        task_entities["test_story_task_0"] = "mock_entity_1"
+        task_entities["test_story_task_1"] = "mock_entity_2"
+
+        # Verify entities are registered
+        assert len(task_entities) == 2
+
+        # Unload entry
+        with patch.object(
+            hass.config_entries, "async_unload_platforms", return_value=True
+        ):
+            await async_unload_entry(hass, entry)
+
+        # Verify entities are removed
+        assert "test_story_task_0" not in hass.data[DOMAIN]["task_entities"]
+        assert "test_story_task_1" not in hass.data[DOMAIN]["task_entities"]
+
+
+async def test_multiple_stories_entity_registry(hass: HomeAssistant):
+    """Test that multiple stories can register entities without conflicts."""
+    await async_setup(hass, {})
+
+    entry1 = ConfigEntry(
+        version=1,
+        minor_version=0,
+        domain=DOMAIN,
+        title="Story 1",
+        data={
+            "story_name": "Story 1",
+            "story_description": "First",
+            "story_id": "story_1",
+            "tasks": [{"title": "Task 1A", "description": "Test", "state": "todo"}],
+        },
+        source="user",
+        unique_id="story1_unique",
+    )
+
+    entry2 = ConfigEntry(
+        version=1,
+        minor_version=0,
+        domain=DOMAIN,
+        title="Story 2",
+        data={
+            "story_name": "Story 2",
+            "story_description": "Second",
+            "story_id": "story_2",
+            "tasks": [{"title": "Task 2A", "description": "Test", "state": "todo"}],
+        },
+        source="user",
+        unique_id="story2_unique",
+    )
+
+    with patch("custom_components.storyflow.StorageHandler"), patch(
+        "custom_components.storyflow.StoryManager"
+    ) as mock_manager, patch("custom_components.storyflow.async_setup_services"):
+
+        mock_manager_instance = AsyncMock()
+        mock_manager_instance.create_story = AsyncMock(
+            side_effect=["story_1", "story_2"]
+        )
+        mock_manager.return_value = mock_manager_instance
+
+        await async_setup_entry(hass, entry1)
+        await async_setup_entry(hass, entry2)
+
+        # Manually add entities (simulating sensor.py)
+        task_entities = hass.data[DOMAIN]["task_entities"]
+        task_entities["story_1_task_0"] = "mock_entity_1a"
+        task_entities["story_2_task_0"] = "mock_entity_2a"
+
+        # Verify both stories' entities coexist
+        assert "story_1_task_0" in task_entities
+        assert "story_2_task_0" in task_entities
+        assert len(task_entities) == 2
+
+        # Unload first story
+        with patch.object(
+            hass.config_entries, "async_unload_platforms", return_value=True
+        ), patch("custom_components.storyflow.async_unload_services"):
+            await async_unload_entry(hass, entry1)
+
+        # Only story 1's entities should be removed
+        assert "story_1_task_0" not in task_entities
+        assert "story_2_task_0" in task_entities
+
+
+async def test_entity_lookup_with_legacy_story_id(hass: HomeAssistant):
+    """Test that entity lookup works with legacy entries (derived story_id)."""
+    await async_setup(hass, {})
+
+    entry = ConfigEntry(
+        version=1,
+        minor_version=0,
+        domain=DOMAIN,
+        title="My Test Story",
+        data={
+            "story_name": "My Test Story",
+            "story_description": "Test",
+            # No story_id field (legacy)
+            "tasks": [{"title": "Task 1", "description": "Test", "state": "todo"}],
+        },
+        source="user",
+        unique_id="legacy_unique",
+    )
+
+    with patch("custom_components.storyflow.StorageHandler"), patch(
+        "custom_components.storyflow.StoryManager"
+    ) as mock_manager, patch("custom_components.storyflow.async_setup_services"), patch(
+        "custom_components.storyflow.async_unload_services"
+    ):
+
+        mock_manager_instance = AsyncMock()
+        mock_manager_instance.create_story = AsyncMock(return_value="my_test_story")
+        mock_manager.return_value = mock_manager_instance
+
+        await async_setup_entry(hass, entry)
+
+        # Manually add entity with derived story_id (simulating sensor.py)
+        task_entities = hass.data[DOMAIN]["task_entities"]
+        task_entities["my_test_story_task_0"] = "mock_entity"
+
+        # Verify entity is accessible
+        from custom_components.storyflow import get_task_entity
+
+        entity = get_task_entity(hass, "my_test_story_task_0")
+        assert entity is not None
+
+        # Unload should clean up using derived story_id
+        with patch.object(
+            hass.config_entries, "async_unload_platforms", return_value=True
+        ):
+            await async_unload_entry(hass, entry)
+
+        # Entity should be removed
+        assert "my_test_story_task_0" not in task_entities

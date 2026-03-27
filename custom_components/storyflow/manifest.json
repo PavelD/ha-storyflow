@@ -1,15 +1,15 @@
 {
     "domain": "storyflow",
     "name": "StoryFlow",
-    "version": "0.0.1",
-    "requirements": [],
-    "documentation": "https://github.com/PavelD/hacs-storyflow-itegration/",
-    "issue_tracker": "https://github.com/PavelD/hacs-storyflow-itegration/issues",
-    "dependencies": [],
     "codeowners": [
         "@PavelD"
     ],
-    "iot_class": "assumed_state",
+    "config_flow": true,
+    "dependencies": [],
+    "documentation": "https://github.com/PavelD/ha-storyflow/",
     "integration_type": "service",
-    "config_flow": true
+    "iot_class": "assumed_state",
+    "issue_tracker": "https://github.com/PavelD/ha-storyflow/issues",
+    "requirements": [],
+    "version": "0.0.1"    
 }

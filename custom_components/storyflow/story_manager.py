@@ -119,6 +119,94 @@ class StoryManager:
             story_id, task_id, {"assigned_to": person_id}
         )
 
+    async def async_generate_task_id(self, story_id: str) -> str:
+        """Generate a unique task_id for a new task within a story.
+
+        Args:
+            story_id: The story identifier
+
+        Returns:
+            A unique task_id in the format "{story_id}_task_{index}"
+
+        Raises:
+            ValueError: If story does not exist
+        """
+        await self.async_validate_story_exists(story_id)
+
+        story_data = await self.storage.load_story(story_id)
+        tasks = story_data.get("tasks", [])
+
+        # Find the highest existing task index
+        max_index = -1
+        for task in tasks:
+            task_id = task.get("id", "")
+            # Extract index from task_id format: "{story_id}_task_{index}"
+            if task_id.startswith(f"{story_id}_task_"):
+                try:
+                    index = int(task_id.split("_task_")[-1])
+                    max_index = max(max_index, index)
+                except ValueError:
+                    pass  # Skip malformed task IDs
+
+        # Generate new task_id with next index
+        new_index = max_index + 1
+        return f"{story_id}_task_{new_index}"
+
+    async def async_add_task(
+        self,
+        story_id: str,
+        title: str,
+        description: str = "",
+        assigned_to: str | None = None,
+        state: str = "todo",
+    ) -> dict:
+        """Add a new task to a story.
+
+        Args:
+            story_id: The story identifier
+            title: Task title
+            description: Task description (optional)
+            assigned_to: Person entity ID to assign task to (optional)
+            state: Initial task state (default: "todo")
+
+        Returns:
+            Dictionary containing the created task data including generated task_id
+
+        Raises:
+            ValueError: If story does not exist or state is invalid
+        """
+        await self.async_validate_story_exists(story_id)
+
+        # Validate state
+        valid_states = ["todo", "progress", "review", "done", "rejected"]
+        if state not in valid_states:
+            raise ValueError(
+                f"Invalid state '{state}'. Must be one of: {', '.join(valid_states)}"
+            )
+
+        # Generate unique task_id
+        task_id = await self.async_generate_task_id(story_id)
+
+        # Get current tasks to determine order
+        story_data = await self.storage.load_story(story_id)
+        tasks = story_data.get("tasks", [])
+        order = len(tasks)  # New task goes at the end
+
+        # Create task data structure
+        task_data = {
+            "id": task_id,
+            "title": title,
+            "description": description,
+            "assigned_to": assigned_to,
+            "state": state,
+            "order": order,
+        }
+
+        # Add task to storage
+        await self.storage.async_add_task(story_id, task_data)
+
+        return task_data
+
     def clone_story(self, story_id, new_title):
         """Clone a story: tasks reset to todo + assigned_to=None."""
         raise NotImplementedError("clone_story is not implemented yet.")

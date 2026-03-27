@@ -29,7 +29,17 @@ async def async_setup_entry(
     tasks = entry.data.get("tasks", [])
 
     # Create progress sensor for the story
-    sensors = [StoryProgressEntity(story_id, tasks)]
+    progress_entity = StoryProgressEntity(story_id, tasks)
+    sensors = [progress_entity]
+
+    # Store callback and progress entity for dynamic entity management
+    if "entity_callbacks" not in hass.data[DOMAIN]:
+        hass.data[DOMAIN]["entity_callbacks"] = {}
+    if "progress_entities" not in hass.data[DOMAIN]:
+        hass.data[DOMAIN]["progress_entities"] = {}
+
+    hass.data[DOMAIN]["entity_callbacks"][story_id] = async_add_entities
+    hass.data[DOMAIN]["progress_entities"][story_id] = progress_entity
 
     # Create task entities and register them in the entity lookup
     for idx, task in enumerate(tasks):

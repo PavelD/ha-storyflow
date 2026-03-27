@@ -153,12 +153,10 @@ async def test_assign_task_valid_person(story_manager, mock_storage, mock_hass):
     mock_storage.async_update_task.return_value = None
 
     # Mock entity registry to show person exists
-    with patch(
-        "custom_components.storyflow.story_manager.entity_registry"
-    ) as mock_ent_reg:
+    with patch("homeassistant.helpers.entity_registry.async_get") as mock_async_get:
         mock_registry = MagicMock()
         mock_registry.async_is_registered.return_value = True
-        mock_ent_reg.async_get.return_value = mock_registry
+        mock_async_get.return_value = mock_registry
 
         await story_manager.async_assign_task("story1", "task1", "person.john")
 
@@ -193,12 +191,10 @@ async def test_assign_task_invalid_person_entity(
     mock_storage.async_get_task.return_value = {"id": "task1", "assigned_to": None}
 
     # Mock entity registry to show person doesn't exist
-    with patch(
-        "custom_components.storyflow.story_manager.entity_registry"
-    ) as mock_ent_reg:
+    with patch("homeassistant.helpers.entity_registry.async_get") as mock_async_get:
         mock_registry = MagicMock()
         mock_registry.async_is_registered.return_value = False
-        mock_ent_reg.async_get.return_value = mock_registry
+        mock_async_get.return_value = mock_registry
         mock_hass.states.get.return_value = None
 
         with pytest.raises(
@@ -221,12 +217,10 @@ async def test_assign_task_person_in_state_registry(
 
     # Mock entity registry to show person not registered
     # but state registry shows it exists
-    with patch(
-        "custom_components.storyflow.story_manager.entity_registry"
-    ) as mock_ent_reg:
+    with patch("homeassistant.helpers.entity_registry.async_get") as mock_async_get:
         mock_registry = MagicMock()
         mock_registry.async_is_registered.return_value = False
-        mock_ent_reg.async_get.return_value = mock_registry
+        mock_async_get.return_value = mock_registry
 
         mock_state = MagicMock()
         mock_hass.states.get.return_value = mock_state

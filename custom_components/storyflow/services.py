@@ -7,7 +7,6 @@ import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
 import homeassistant.helpers.config_validation as cv
 
-from . import get_task_entity
 from .const import DOMAIN, TASK_STATES
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,8 +52,8 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 "Service call: set_task_state for %s to %s", task_id, new_state
             )
 
-            # Find task entity
-            task_entity = get_task_entity(hass, task_id)
+            # Find task entity from the registry
+            task_entity = hass.data[DOMAIN]["task_entities"].get(task_id)
             if task_entity is None:
                 error_msg = f"Task '{task_id}' not found"
                 _LOGGER.error(error_msg)

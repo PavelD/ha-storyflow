@@ -1,4 +1,4 @@
-name: HACS Action
+name: Hassfest Action
 
 permissions:
   contents: read
@@ -15,16 +15,10 @@ on:
 jobs:
   hacs:
     if: "!startsWith(github.event.head_commit.message, 'Update manifest version to')"
-    name: HACS Action
+    name: Hassfest Action
     runs-on: "ubuntu-latest"
     steps:
       - uses: "actions/checkout@v4"
 
-      - name: Check hacs.json syntax
-        run: |
-          python -m json.tool hacs.json
-
-      - name: HACS Action
-        uses: "hacs/action@main"
-        with:
-          category: "integration"
+      - name: Run Hassfest
+        uses: home-assistant/actions/hassfest@master

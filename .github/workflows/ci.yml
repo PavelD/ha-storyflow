@@ -2,11 +2,12 @@ name: I
 
 on:
   push:
+    branches:
+      - main
     paths:
       - 'custom_components/**'
       - 'tests/**'
   pull_request:
-    types: [opened, synchronize, reopened]
     paths:
       - 'custom_components/**'
       - 'tests/**'
@@ -14,6 +15,7 @@ on:
 
 jobs:
   black:
+    if: "!startsWith(github.event.head_commit.message, 'Update manifest version to')"
     name: Python Code Format Check
     runs-on: ubuntu-latest
     steps:
@@ -25,7 +27,9 @@ jobs:
           args: ". --check --fast --diff"
 
   tests:
+    if: "!startsWith(github.event.head_commit.message, 'Update manifest version to')"
     runs-on: ubuntu-latest
+    name: Test Integration
 
     strategy:
       matrix:

@@ -91,6 +91,44 @@ add_task:
             - 'done'
             - 'rejected'
 
+delete_task:
+  name: Delete Task
+  description: Remove a task from a story
+  fields:
+    task_id:
+      name: Task ID
+      description: The unique identifier of the task to delete
+      required: true
+      example: 'kitchen_task_1'
+      selector:
+        text:
+
+update_task:
+  name: Update Task
+  description: Update the title and/or description of a task
+  fields:
+    task_id:
+      name: Task ID
+      description: The unique identifier of the task to update
+      required: true
+      example: 'kitchen_task_1'
+      selector:
+        text:
+    title:
+      name: Title
+      description: New title for the task (optional)
+      required: false
+      example: 'Install new cabinets'
+      selector:
+        text:
+    description:
+      name: Description
+      description: New detailed description for the task (optional)
+      required: false
+      example: 'Choose and install modern kitchen cabinets'
+      selector:
+        text:
+
 clone_story:
   name: Clone Story
   description: Create a copy of a story with reset tasks

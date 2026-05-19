@@ -39,9 +39,9 @@
 - ✅ Auto-generates unique task IDs within a story
 - ✅ Full state validation (todo, progress, review, done, rejected)
 - ✅ Optional person assignment at task creation
-- ✅ Progress entity auto-refreshes on task addition
-- ⏳ Delete completed tasks (Planned)
-- ⏳ Update task details (Planned)
+- ✅ Progress entity auto-refreshes on task addition and deletion
+- ✅ Delete tasks from stories (`delete_task` service)
+- ✅ Update task title and/or description (`update_task` service)
 
 #### ⏳ Milestone 5: Advanced Features (Planned)
 - Clone stories for recurring projects
@@ -59,12 +59,13 @@
 - 🤖 Update task states via automations (`set_task_state`)
 - 👤 Assign/unassign tasks programmatically (`assign_task`)
 - ⚡ Trigger actions based on task changes
-- ➕ **NEW!** Add new tasks to stories dynamically (`add_task`)
-- 🔄 **NEW!** Progress entity auto-updates when tasks are added
+- ➕ Add new tasks to stories dynamically (`add_task`)
+- 🗑️ Delete tasks from stories (`delete_task`)
+- ✏️ Update task title and/or description (`update_task`)
+- 🔄 Progress entity auto-updates when tasks are added or removed
 
 **⏳ Coming Soon (Next Release):**
-- 🗑️ Delete completed tasks  
-- ✏️ Edit task details (title, description)
+- 🔁 Clone stories for recurring projects (`clone_story`)
 - 🔔 Send notifications when tasks change state
 
 **💡 Use Cases This Integration is Perfect For:**
@@ -291,17 +292,50 @@ automation:
           person_id: "person.john"
 ```
 
+#### `storyflow.delete_task`
+**Remove a task from a story**
+
+```yaml
+service: storyflow.delete_task
+data:
+  task_id: "kitchen_task_2"
+```
+
+**Parameters:**
+- `task_id` (required): ID of the task to delete
+
+**What happens when you delete a task:**
+1. The task is removed from storage
+2. Its sensor entity is removed from Home Assistant
+3. The progress entity recalculates and updates instantly
+
+#### `storyflow.update_task`
+**Update a task's title and/or description**
+
+```yaml
+service: storyflow.update_task
+data:
+  task_id: "kitchen_task_1"
+  title: "Install new cabinets"
+  description: "Choose and install modern kitchen cabinets"
+```
+
+**Parameters:**
+- `task_id` (required): ID of the task to update
+- `title` (optional): New title for the task
+- `description` (optional): New description for the task
+- At least one of `title` or `description` must be provided
+
 ### 🚧 Stub Services (Non-Functional)
 
 #### `storyflow.clone_story`
-**Clone a story** _(Planned for Phase 4)_
+**Clone a story** _(Planned for Milestone 5)_
 
-Currently logs only. Will duplicate stories with reset tasks.
+Currently logs only. Will duplicate stories with all tasks reset to `todo`.
 
 ### ⏳ Planned for Future Releases
 
-- `storyflow.update_task` - Update task details
-- `storyflow.delete_task` - Remove tasks from stories
+- `storyflow.clone_story` - Clone a story with tasks reset to initial state
 
 ---
 
@@ -360,13 +394,12 @@ pytest --cov=custom_components.storyflow
 
 ### Coming in Next Releases
 
-**Task Management** (Milestone 4 - Partial)
-- ✅ Add new tasks to existing stories (`add_task`)
-- ⏳ Delete completed tasks
-- ⏳ Edit task details (title, description)
+**Advanced Features** (Milestone 5)
+- 🔁 Clone stories for recurring projects (`clone_story`)
+- Rich service documentation in Home Assistant UI
+- Example automations and blueprints
 
-**Advanced Features** (Milestone 5+)
-- Copy stories for recurring projects
+**Future Vision** (Milestone 6+)
 - Interactive Lovelace card with quick actions
 - Task dependencies ("Task B needs Task A first")
 - Due dates and reminders

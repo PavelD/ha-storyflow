@@ -15,6 +15,8 @@ _LOGGER = logging.getLogger(__name__)
 SERVICE_SET_STATE = "set_task_state"
 SERVICE_ASSIGN = "assign_task"
 SERVICE_ADD_TASK = "add_task"
+SERVICE_DELETE_TASK = "delete_task"
+SERVICE_UPDATE_TASK = "update_task"
 SERVICE_CLONE_STORY = "clone_story"
 
 SET_STATE_SCHEMA = vol.Schema(
@@ -38,6 +40,20 @@ ADD_TASK_SCHEMA = vol.Schema(
         vol.Optional("description"): cv.string,
         vol.Optional("assigned_to"): cv.string,
         vol.Optional("state", default="todo"): vol.In(TASK_STATES),
+    }
+)
+
+DELETE_TASK_SCHEMA = vol.Schema(
+    {
+        vol.Required("task_id"): cv.string,
+    }
+)
+
+UPDATE_TASK_SCHEMA = vol.Schema(
+    {
+        vol.Required("task_id"): cv.string,
+        vol.Optional("title"): cv.string,
+        vol.Optional("description"): cv.string,
     }
 )
 
@@ -194,6 +210,117 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 _LOGGER.error("Failed to add task to story %s: %s", story_id, err)
                 raise
 
+        async def delete_task_service(call: ServiceCall) -> None:
+            """Delete a task from a story."""
+            task_id = call.data["task_id"]
+
+            _LOGGER.debug("Service call: delete_task for %s", task_id)
+
+            # Find task entity from the registry
+            task_entity = hass.data[DOMAIN].get("task_entities", {}).get(task_id)
+            if task_entity is None:
+                _LOGGER.error("Task '%s' not found", task_id)
+                raise TaskNotFoundError(task_id)
+
+            story_id = task_entity.story_id
+
+            try:
+                # Find the manager and storage for this story
+                manager = None
+                storage_handler = None
+                for entry_data in hass.data[DOMAIN].values():
+                    if (
+                        isinstance(entry_data, dict)
+                        and "manager" in entry_data
+                        and "storage" in entry_data
+                    ):
+                        if await entry_data["storage"].async_story_exists(story_id):
+                            manager = entry_data["manager"]
+                            storage_handler = entry_data["storage"]
+                            break
+
+                if not manager or not storage_handler:
+                    _LOGGER.error("No manager found for story '%s'", story_id)
+                    raise ValueError(f"Story '{story_id}' not found")
+
+                # Delete task from storage via manager (validates existence)
+                await manager.async_delete_task(story_id, task_id)
+
+                # Remove entity from Home Assistant entity registry
+                from homeassistant.helpers import entity_registry as er
+
+                entity_reg = er.async_get(hass)
+                unique_id = f"{DOMAIN}_{task_id}"
+                ha_entity_id = entity_reg.async_get_entity_id(
+                    "sensor", DOMAIN, unique_id
+                )
+                if ha_entity_id:
+                    entity_reg.async_remove(ha_entity_id)
+                    _LOGGER.debug(
+                        "Removed entity %s from entity registry", ha_entity_id
+                    )
+
+                # Remove from task_entities lookup registry
+                hass.data[DOMAIN]["task_entities"].pop(task_id, None)
+
+                # Update progress entity to recalculate stats
+                progress_entity = hass.data[DOMAIN]["progress_entities"].get(story_id)
+                if progress_entity:
+                    story_data = await storage_handler.load_story(story_id)
+                    progress_entity.tasks = story_data.get("tasks", [])
+                    progress_entity.async_write_ha_state()
+
+                _LOGGER.info(
+                    "Successfully deleted task '%s' from story '%s'",
+                    task_id,
+                    story_id,
+                )
+
+            except ValueError as err:
+                _LOGGER.error("Failed to delete task %s: %s", task_id, err)
+                raise
+
+        async def update_task_service(call: ServiceCall) -> None:
+            """Update a task's title and/or description."""
+            task_id = call.data["task_id"]
+            title = call.data.get("title")
+            description = call.data.get("description")
+
+            _LOGGER.debug("Service call: update_task for %s", task_id)
+
+            # Validate at least one field is provided
+            if title is None and description is None:
+                raise ValueError(
+                    "At least one of 'title' or 'description' must be provided"
+                )
+
+            # Find task entity from the registry
+            task_entity = hass.data[DOMAIN].get("task_entities", {}).get(task_id)
+            if task_entity is None:
+                _LOGGER.error("Task '%s' not found", task_id)
+                raise TaskNotFoundError(task_id)
+
+            try:
+                # Build the updates dict (only include provided fields)
+                updates = {}
+                if title is not None:
+                    updates["title"] = title
+                if description is not None:
+                    updates["description"] = description
+
+                # Update entity attributes (persists to storage + updates HA state)
+                await task_entity.async_update_attributes(**updates)
+
+                _LOGGER.info(
+                    "Successfully updated task '%s' with fields: %s",
+                    task_id,
+                    list(updates.keys()),
+                )
+
+            except ValueError as err:
+                _LOGGER.error("Failed to update task %s: %s", task_id, err)
+                raise
+
         async def clone_story_service(call: ServiceCall) -> None:
             """Clone a story."""
             story_id = call.data["story_id"]
@@ -226,6 +353,20 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
         hass.services.async_register(
             DOMAIN,
+            SERVICE_DELETE_TASK,
+            delete_task_service,
+            schema=DELETE_TASK_SCHEMA,
+        )
+
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_UPDATE_TASK,
+            update_task_service,
+            schema=UPDATE_TASK_SCHEMA,
+        )
+
+        hass.services.async_register(
+            DOMAIN,
             SERVICE_CLONE_STORY,
             clone_story_service,
             schema=CLONE_STORY_SCHEMA,
@@ -248,4 +389,6 @@ async def async_unload_services(hass: HomeAssistant) -> None:
         hass.services.async_remove(DOMAIN, SERVICE_SET_STATE)
         hass.services.async_remove(DOMAIN, SERVICE_ASSIGN)
         hass.services.async_remove(DOMAIN, SERVICE_ADD_TASK)
+        hass.services.async_remove(DOMAIN, SERVICE_DELETE_TASK)
+        hass.services.async_remove(DOMAIN, SERVICE_UPDATE_TASK)
         hass.services.async_remove(DOMAIN, SERVICE_CLONE_STORY)

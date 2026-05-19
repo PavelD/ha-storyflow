@@ -535,3 +535,193 @@ async def test_add_task_persists_to_storage(story_manager, mock_storage):
     task_data = call_args[0][1]
     assert task_data["id"] == "mystory_task_0"
     assert task_data["title"] == "New Task"
+
+
+# =============================================================================
+# Tests for async_delete_task
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_delete_task_success(story_manager, mock_storage):
+    """Test successfully deleting an existing task."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = {"id": "task1", "title": "Test"}
+    mock_storage.async_delete_task.return_value = None
+
+    await story_manager.async_delete_task("story1", "task1")
+
+    mock_storage.async_delete_task.assert_called_once_with("story1", "task1")
+
+
+@pytest.mark.asyncio
+async def test_delete_task_story_not_found(story_manager, mock_storage):
+    """Test deleting a task from a non-existent story raises ValueError."""
+    mock_storage.async_story_exists.return_value = False
+
+    with pytest.raises(ValueError, match="Story 'story1' not found"):
+        await story_manager.async_delete_task("story1", "task1")
+
+    mock_storage.async_delete_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_task_task_not_found(story_manager, mock_storage):
+    """Test deleting a non-existent task raises ValueError."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = None
+
+    with pytest.raises(ValueError, match="Task 'task1' not found in story 'story1'"):
+        await story_manager.async_delete_task("story1", "task1")
+
+    mock_storage.async_delete_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_task_validates_before_deleting(story_manager, mock_storage):
+    """Test that story and task are validated before deletion is called."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = {"id": "task1", "title": "Test"}
+    mock_storage.async_delete_task.return_value = None
+
+    await story_manager.async_delete_task("story1", "task1")
+
+    # Both story and task must have been validated before deletion
+    mock_storage.async_story_exists.assert_called_once_with("story1")
+    mock_storage.async_get_task.assert_called_once_with("story1", "task1")
+    mock_storage.async_delete_task.assert_called_once_with("story1", "task1")
+
+
+@pytest.mark.asyncio
+async def test_delete_task_storage_propagates_error(story_manager, mock_storage):
+    """Test that a storage error during delete propagates to the caller."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = {"id": "task1", "title": "Test"}
+    mock_storage.async_delete_task.side_effect = ValueError("Storage error")
+
+    with pytest.raises(ValueError, match="Storage error"):
+        await story_manager.async_delete_task("story1", "task1")
+
+
+# =============================================================================
+# Tests for async_update_task_details
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_update_task_details_title_only(story_manager, mock_storage):
+    """Test updating only the title of a task."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = {"id": "task1", "title": "Old Title"}
+    mock_storage.async_update_task.return_value = None
+
+    await story_manager.async_update_task_details("story1", "task1", title="New Title")
+
+    mock_storage.async_update_task.assert_called_once_with(
+        "story1", "task1", {"title": "New Title"}
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_task_details_description_only(story_manager, mock_storage):
+    """Test updating only the description of a task."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = {
+        "id": "task1",
+        "description": "Old desc",
+    }
+    mock_storage.async_update_task.return_value = None
+
+    await story_manager.async_update_task_details(
+        "story1", "task1", description="New description"
+    )
+
+    mock_storage.async_update_task.assert_called_once_with(
+        "story1", "task1", {"description": "New description"}
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_task_details_both_fields(story_manager, mock_storage):
+    """Test updating both title and description of a task."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = {"id": "task1", "title": "Old"}
+    mock_storage.async_update_task.return_value = None
+
+    await story_manager.async_update_task_details(
+        "story1", "task1", title="New Title", description="New Desc"
+    )
+
+    mock_storage.async_update_task.assert_called_once_with(
+        "story1", "task1", {"title": "New Title", "description": "New Desc"}
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_task_details_no_fields_raises(story_manager, mock_storage):
+    """Test that providing no fields raises ValueError before any storage access."""
+    with pytest.raises(ValueError, match="At least one field.*must be provided"):
+        await story_manager.async_update_task_details("story1", "task1")
+
+    # No storage calls should happen when no fields are provided
+    mock_storage.async_story_exists.assert_not_called()
+    mock_storage.async_update_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_task_details_story_not_found(story_manager, mock_storage):
+    """Test updating a task in a non-existent story raises ValueError."""
+    mock_storage.async_story_exists.return_value = False
+
+    with pytest.raises(ValueError, match="Story 'story1' not found"):
+        await story_manager.async_update_task_details(
+            "story1", "task1", title="New Title"
+        )
+
+    mock_storage.async_update_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_task_details_task_not_found(story_manager, mock_storage):
+    """Test updating a non-existent task raises ValueError."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = None
+
+    with pytest.raises(ValueError, match="Task 'task1' not found"):
+        await story_manager.async_update_task_details(
+            "story1", "task1", title="New Title"
+        )
+
+    mock_storage.async_update_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_task_details_validates_existence_before_update(
+    story_manager, mock_storage
+):
+    """Test that task existence is validated before the storage update call."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = {"id": "task1", "title": "Old"}
+    mock_storage.async_update_task.return_value = None
+
+    await story_manager.async_update_task_details("story1", "task1", title="New Title")
+
+    # Validation calls must precede the update call
+    mock_storage.async_story_exists.assert_called_once_with("story1")
+    mock_storage.async_get_task.assert_called_once_with("story1", "task1")
+    mock_storage.async_update_task.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_update_task_details_storage_error_propagates(
+    story_manager, mock_storage
+):
+    """Test that a storage error during update propagates to the caller."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = {"id": "task1", "title": "Old"}
+    mock_storage.async_update_task.side_effect = ValueError("Storage error")
+
+    with pytest.raises(ValueError, match="Storage error"):
+        await story_manager.async_update_task_details(
+            "story1", "task1", title="New Title"
+        )

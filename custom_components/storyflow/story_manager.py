@@ -220,6 +220,58 @@ class StoryManager:
 
         return task_data
 
+    async def async_delete_task(self, story_id: str, task_id: str) -> None:
+        """Delete a task from a story.
+
+        Args:
+            story_id: The story identifier
+            task_id: The task identifier
+
+        Raises:
+            ValueError: If story or task not found
+        """
+        # Validate task exists before deletion
+        await self.async_validate_task_exists(story_id, task_id)
+
+        # Delete via storage
+        await self.storage.async_delete_task(story_id, task_id)
+
+    async def async_update_task_details(
+        self,
+        story_id: str,
+        task_id: str,
+        title: str | None = None,
+        description: str | None = None,
+    ) -> None:
+        """Update the title and/or description of a task.
+
+        Args:
+            story_id: The story identifier
+            task_id: The task identifier
+            title: New task title (optional)
+            description: New task description (optional)
+
+        Raises:
+            ValueError: If story/task not found or no fields provided
+        """
+        # Validate at least one field is provided
+        updates = {}
+        if title is not None:
+            updates["title"] = title
+        if description is not None:
+            updates["description"] = description
+
+        if not updates:
+            raise ValueError(
+                "At least one field (title, description) must be provided to update"
+            )
+
+        # Validate task exists
+        await self.async_validate_task_exists(story_id, task_id)
+
+        # Update via storage
+        await self.storage.async_update_task(story_id, task_id, updates)
+
     def clone_story(self, story_id, new_title):
         """Clone a story: tasks reset to todo + assigned_to=None."""
         raise NotImplementedError("clone_story is not implemented yet.")

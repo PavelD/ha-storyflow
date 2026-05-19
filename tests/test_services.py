@@ -11,6 +11,8 @@ from custom_components.storyflow.services import (
     SERVICE_SET_STATE,
     SERVICE_ASSIGN,
     SERVICE_ADD_TASK,
+    SERVICE_DELETE_TASK,
+    SERVICE_UPDATE_TASK,
     SERVICE_CLONE_STORY,
 )
 from custom_components.storyflow.const import DOMAIN, TASK_STATES
@@ -907,3 +909,508 @@ async def test_add_task_manager_raises_value_error(
 
     # Progress entity must NOT have been refreshed
     mock_progress.async_write_ha_state.assert_not_called()
+
+
+# =============================================================================
+# Tests for delete_task service
+# =============================================================================
+
+
+@pytest.fixture
+def mock_delete_storage():
+    """Create a mock storage handler for delete_task tests."""
+    storage = MagicMock()
+    storage.async_story_exists = AsyncMock(return_value=True)
+    storage.load_story = AsyncMock(return_value={"tasks": []})
+    return storage
+
+
+@pytest.fixture
+def mock_delete_manager():
+    """Create a mock manager for delete_task tests."""
+    manager = MagicMock()
+    manager.async_delete_task = AsyncMock()
+    return manager
+
+
+@pytest.fixture
+def mock_task_entity_for_delete():
+    """Create a mock task entity for delete_task tests."""
+    entity = MagicMock()
+    entity.task_id = "kitchen_task_0"
+    entity.story_id = "kitchen"
+    entity.entity_id = "sensor.storyflow_kitchen_task_0"
+    return entity
+
+
+async def test_services_registered_includes_delete_and_update(hass: HomeAssistant):
+    """Test that delete_task and update_task services are registered."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+    await async_setup_services(hass)
+
+    assert hass.services.has_service(DOMAIN, SERVICE_DELETE_TASK)
+    assert hass.services.has_service(DOMAIN, SERVICE_UPDATE_TASK)
+
+
+async def test_delete_task_calls_manager(
+    hass: HomeAssistant,
+    mock_task_entity_for_delete,
+    mock_delete_manager,
+    mock_delete_storage,
+):
+    """Test delete_task service calls the manager to remove from storage."""
+    task_id = "kitchen_task_0"
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {task_id: mock_task_entity_for_delete},
+        "progress_entities": {},
+        "entry_data": {
+            "manager": mock_delete_manager,
+            "storage": mock_delete_storage,
+        },
+    }
+    await async_setup_services(hass)
+
+    with patch("homeassistant.helpers.entity_registry.async_get") as mock_er:
+        mock_reg = MagicMock()
+        mock_reg.async_get_entity_id.return_value = None
+        mock_er.return_value = mock_reg
+
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_DELETE_TASK,
+            {"task_id": task_id},
+            blocking=True,
+        )
+
+    mock_delete_manager.async_delete_task.assert_called_once_with("kitchen", task_id)
+
+
+async def test_delete_task_removes_from_task_entities(
+    hass: HomeAssistant,
+    mock_task_entity_for_delete,
+    mock_delete_manager,
+    mock_delete_storage,
+):
+    """Test delete_task removes the task from the task_entities registry."""
+    task_id = "kitchen_task_0"
+    task_entities = {task_id: mock_task_entity_for_delete}
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": task_entities,
+        "progress_entities": {},
+        "entry_data": {
+            "manager": mock_delete_manager,
+            "storage": mock_delete_storage,
+        },
+    }
+    await async_setup_services(hass)
+
+    with patch("homeassistant.helpers.entity_registry.async_get") as mock_er:
+        mock_reg = MagicMock()
+        mock_reg.async_get_entity_id.return_value = None
+        mock_er.return_value = mock_reg
+
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_DELETE_TASK,
+            {"task_id": task_id},
+            blocking=True,
+        )
+
+    # Task must be removed from the registry
+    assert task_id not in hass.data[DOMAIN]["task_entities"]
+
+
+async def test_delete_task_removes_entity_from_registry(
+    hass: HomeAssistant,
+    mock_task_entity_for_delete,
+    mock_delete_manager,
+    mock_delete_storage,
+):
+    """Test delete_task removes the HA entity from the entity registry."""
+    task_id = "kitchen_task_0"
+    ha_entity_id = "sensor.storyflow_kitchen_task_0"
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {task_id: mock_task_entity_for_delete},
+        "progress_entities": {},
+        "entry_data": {
+            "manager": mock_delete_manager,
+            "storage": mock_delete_storage,
+        },
+    }
+    await async_setup_services(hass)
+
+    with patch("homeassistant.helpers.entity_registry.async_get") as mock_er:
+        mock_reg = MagicMock()
+        mock_reg.async_get_entity_id.return_value = ha_entity_id
+        mock_er.return_value = mock_reg
+
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_DELETE_TASK,
+            {"task_id": task_id},
+            blocking=True,
+        )
+
+        # Entity registry remove should be called with the found entity_id
+        mock_reg.async_remove.assert_called_once_with(ha_entity_id)
+
+
+async def test_delete_task_updates_progress_entity(
+    hass: HomeAssistant,
+    mock_task_entity_for_delete,
+    mock_delete_manager,
+    mock_delete_storage,
+):
+    """Test delete_task refreshes the progress entity after deletion."""
+    task_id = "kitchen_task_0"
+
+    mock_progress = MagicMock()
+    mock_progress.tasks = [{"id": task_id, "state": "done"}]
+    mock_progress.async_write_ha_state = MagicMock()
+
+    # After deletion, storage returns empty task list
+    mock_delete_storage.load_story.return_value = {"tasks": []}
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {task_id: mock_task_entity_for_delete},
+        "progress_entities": {"kitchen": mock_progress},
+        "entry_data": {
+            "manager": mock_delete_manager,
+            "storage": mock_delete_storage,
+        },
+    }
+    await async_setup_services(hass)
+
+    with patch("homeassistant.helpers.entity_registry.async_get") as mock_er:
+        mock_reg = MagicMock()
+        mock_reg.async_get_entity_id.return_value = None
+        mock_er.return_value = mock_reg
+
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_DELETE_TASK,
+            {"task_id": task_id},
+            blocking=True,
+        )
+
+    # Progress entity should have been refreshed with updated task list
+    mock_progress.async_write_ha_state.assert_called_once()
+    assert mock_progress.tasks == []
+
+
+async def test_delete_task_no_progress_entity_no_error(
+    hass: HomeAssistant,
+    mock_task_entity_for_delete,
+    mock_delete_manager,
+    mock_delete_storage,
+):
+    """Test delete_task works fine even when there is no progress entity."""
+    task_id = "kitchen_task_0"
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {task_id: mock_task_entity_for_delete},
+        "progress_entities": {},  # No progress entity for this story
+        "entry_data": {
+            "manager": mock_delete_manager,
+            "storage": mock_delete_storage,
+        },
+    }
+    await async_setup_services(hass)
+
+    with patch("homeassistant.helpers.entity_registry.async_get") as mock_er:
+        mock_reg = MagicMock()
+        mock_reg.async_get_entity_id.return_value = None
+        mock_er.return_value = mock_reg
+
+        # Should not raise even without a progress entity
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_DELETE_TASK,
+            {"task_id": task_id},
+            blocking=True,
+        )
+
+    mock_delete_manager.async_delete_task.assert_called_once()
+
+
+async def test_delete_task_task_not_found(hass: HomeAssistant):
+    """Test delete_task raises TaskNotFoundError when task is not in registry."""
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {},
+    }
+    await async_setup_services(hass)
+
+    with pytest.raises(TaskNotFoundError, match="Task 'nonexistent_task' not found"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_DELETE_TASK,
+            {"task_id": "nonexistent_task"},
+            blocking=True,
+        )
+
+
+async def test_delete_task_manager_failure_propagates(
+    hass: HomeAssistant,
+    mock_task_entity_for_delete,
+    mock_delete_storage,
+):
+    """Test delete_task propagates ValueError from manager."""
+    task_id = "kitchen_task_0"
+
+    failing_manager = MagicMock()
+    failing_manager.async_delete_task = AsyncMock(
+        side_effect=ValueError("Delete failed")
+    )
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {task_id: mock_task_entity_for_delete},
+        "progress_entities": {},
+        "entry_data": {
+            "manager": failing_manager,
+            "storage": mock_delete_storage,
+        },
+    }
+    await async_setup_services(hass)
+
+    with pytest.raises(ValueError, match="Delete failed"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_DELETE_TASK,
+            {"task_id": task_id},
+            blocking=True,
+        )
+
+
+async def test_delete_task_missing_task_id_field(hass: HomeAssistant):
+    """Test delete_task schema rejects missing task_id."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+    await async_setup_services(hass)
+
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_DELETE_TASK,
+            {},
+            blocking=True,
+        )
+
+
+async def test_unload_services_removes_delete_and_update(hass: HomeAssistant):
+    """Test that delete_task and update_task are removed when services are unloaded."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+    await async_setup_services(hass)
+
+    assert hass.services.has_service(DOMAIN, SERVICE_DELETE_TASK)
+    assert hass.services.has_service(DOMAIN, SERVICE_UPDATE_TASK)
+
+    await async_unload_services(hass)
+
+    assert not hass.services.has_service(DOMAIN, SERVICE_DELETE_TASK)
+    assert not hass.services.has_service(DOMAIN, SERVICE_UPDATE_TASK)
+
+
+# =============================================================================
+# Tests for update_task service
+# =============================================================================
+
+
+@pytest.fixture
+def mock_task_entity_for_update():
+    """Create a mock task entity for update_task tests."""
+    entity = MagicMock()
+    entity.task_id = "kitchen_task_0"
+    entity.story_id = "kitchen"
+    entity.title = "Old Title"
+    entity.description = "Old Description"
+    entity.async_update_attributes = AsyncMock()
+    return entity
+
+
+async def test_update_task_title_only(hass: HomeAssistant, mock_task_entity_for_update):
+    """Test update_task service updates only the title."""
+    task_id = "kitchen_task_0"
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {task_id: mock_task_entity_for_update},
+    }
+    await async_setup_services(hass)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_UPDATE_TASK,
+        {"task_id": task_id, "title": "New Title"},
+        blocking=True,
+    )
+
+    mock_task_entity_for_update.async_update_attributes.assert_called_once_with(
+        title="New Title"
+    )
+
+
+async def test_update_task_description_only(
+    hass: HomeAssistant, mock_task_entity_for_update
+):
+    """Test update_task service updates only the description."""
+    task_id = "kitchen_task_0"
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {task_id: mock_task_entity_for_update},
+    }
+    await async_setup_services(hass)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_UPDATE_TASK,
+        {"task_id": task_id, "description": "New description"},
+        blocking=True,
+    )
+
+    mock_task_entity_for_update.async_update_attributes.assert_called_once_with(
+        description="New description"
+    )
+
+
+async def test_update_task_both_fields(
+    hass: HomeAssistant, mock_task_entity_for_update
+):
+    """Test update_task service updates both title and description."""
+    task_id = "kitchen_task_0"
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {task_id: mock_task_entity_for_update},
+    }
+    await async_setup_services(hass)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_UPDATE_TASK,
+        {"task_id": task_id, "title": "New Title", "description": "New Desc"},
+        blocking=True,
+    )
+
+    mock_task_entity_for_update.async_update_attributes.assert_called_once_with(
+        title="New Title", description="New Desc"
+    )
+
+
+async def test_update_task_no_fields_raises(hass: HomeAssistant):
+    """Test update_task raises ValueError when neither title nor description is provided."""
+    task_id = "kitchen_task_0"
+
+    mock_entity = MagicMock()
+    mock_entity.task_id = task_id
+    mock_entity.story_id = "kitchen"
+    mock_entity.async_update_attributes = AsyncMock()
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {task_id: mock_entity},
+    }
+    await async_setup_services(hass)
+
+    with pytest.raises(
+        ValueError, match="At least one of 'title' or 'description' must be provided"
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_UPDATE_TASK,
+            {"task_id": task_id},
+            blocking=True,
+        )
+
+    # Entity should not have been updated
+    mock_entity.async_update_attributes.assert_not_called()
+
+
+async def test_update_task_task_not_found(hass: HomeAssistant):
+    """Test update_task raises TaskNotFoundError when task is not registered."""
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {},
+    }
+    await async_setup_services(hass)
+
+    with pytest.raises(TaskNotFoundError, match="Task 'nonexistent' not found"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_UPDATE_TASK,
+            {"task_id": "nonexistent", "title": "New Title"},
+            blocking=True,
+        )
+
+
+async def test_update_task_storage_failure_propagates(
+    hass: HomeAssistant, mock_task_entity_for_update
+):
+    """Test update_task propagates ValueError from entity update."""
+    task_id = "kitchen_task_0"
+    mock_task_entity_for_update.async_update_attributes.side_effect = ValueError(
+        "Storage error"
+    )
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {task_id: mock_task_entity_for_update},
+    }
+    await async_setup_services(hass)
+
+    with pytest.raises(ValueError, match="Storage error"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_UPDATE_TASK,
+            {"task_id": task_id, "title": "New Title"},
+            blocking=True,
+        )
+
+
+async def test_update_task_missing_task_id_field(hass: HomeAssistant):
+    """Test update_task schema rejects missing task_id."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+    await async_setup_services(hass)
+
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_UPDATE_TASK,
+            {"title": "Title without task_id"},
+            blocking=True,
+        )
+
+
+async def test_update_task_entity_state_reflects_update(
+    hass: HomeAssistant, mock_task_entity_for_update
+):
+    """Test update_task correctly passes only provided fields to entity."""
+    task_id = "kitchen_task_0"
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {task_id: mock_task_entity_for_update},
+    }
+    await async_setup_services(hass)
+
+    # Update title only - description kwarg should NOT be passed
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_UPDATE_TASK,
+        {"task_id": task_id, "title": "Updated Title"},
+        blocking=True,
+    )
+
+    call_kwargs = mock_task_entity_for_update.async_update_attributes.call_args[1]
+    assert "title" in call_kwargs
+    assert "description" not in call_kwargs
+    assert call_kwargs["title"] == "Updated Title"

@@ -1414,3 +1414,263 @@ async def test_update_task_entity_state_reflects_update(
     assert "title" in call_kwargs
     assert "description" not in call_kwargs
     assert call_kwargs["title"] == "Updated Title"
+
+
+# =============================================================================
+# Tests for clone_story service
+# =============================================================================
+
+
+def _make_mock_manager_and_storage_for_clone(story_id, story_data):
+    """Helper that returns (mock_manager, mock_storage) wired for clone tests."""
+    mock_storage = AsyncMock()
+    mock_storage.async_story_exists = AsyncMock(
+        side_effect=lambda sid: sid == story_id  # source exists, new one doesn't
+    )
+    mock_storage.load_story = AsyncMock(return_value=story_data)
+    mock_storage.save_story = AsyncMock(return_value=None)
+
+    mock_manager = AsyncMock()
+    mock_manager.async_clone_story = AsyncMock(
+        return_value={
+            "story_id": "kitchen_copy",
+            "story_data": {
+                "title": "Kitchen Copy",
+                "description": story_data.get("description", ""),
+                "tasks": [
+                    {
+                        "id": "kitchen_copy_task_0",
+                        "title": "Paint",
+                        "description": "",
+                        "assigned_to": None,
+                        "state": "todo",
+                        "order": 0,
+                    }
+                ],
+            },
+        }
+    )
+
+    return mock_manager, mock_storage
+
+
+async def test_clone_story_success(hass: HomeAssistant):
+    """Test clone_story service call succeeds and creates entities."""
+    story_id = "kitchen"
+    story_data = {
+        "title": "Kitchen",
+        "description": "",
+        "tasks": [
+            {
+                "id": "kitchen_task_0",
+                "title": "Paint",
+                "description": "",
+                "assigned_to": None,
+                "state": "done",
+                "order": 0,
+            },
+        ],
+    }
+
+    mock_manager, mock_storage = _make_mock_manager_and_storage_for_clone(
+        story_id, story_data
+    )
+    mock_add_entities = MagicMock()
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {},
+        "entity_callbacks": {story_id: mock_add_entities},
+        "progress_entities": {},
+        "entry_kitchen": {
+            "manager": mock_manager,
+            "storage": mock_storage,
+        },
+    }
+
+    await async_setup_services(hass)
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_CLONE_STORY,
+        {"story_id": story_id, "new_story_name": "Kitchen Copy"},
+        blocking=True,
+    )
+
+    # Manager's async_clone_story must have been called
+    mock_manager.async_clone_story.assert_called_once_with(story_id, "Kitchen Copy")
+
+    # async_add_entities must have been called with new entities
+    assert mock_add_entities.call_count == 1
+    new_entities = mock_add_entities.call_args[0][0]
+    # Should include 1 progress entity + 1 task entity
+    assert len(new_entities) == 2
+
+
+async def test_clone_story_source_not_found(hass: HomeAssistant):
+    """Test clone_story raises ValueError when source story doesn't exist."""
+    mock_storage = AsyncMock()
+    mock_storage.async_story_exists = AsyncMock(return_value=False)
+    mock_manager = AsyncMock()
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {},
+        "entity_callbacks": {},
+        "progress_entities": {},
+        "entry_data": {
+            "manager": mock_manager,
+            "storage": mock_storage,
+        },
+    }
+
+    await async_setup_services(hass)
+
+    with pytest.raises(ValueError, match="not found"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_CLONE_STORY,
+            {"story_id": "nonexistent"},
+            blocking=True,
+        )
+
+
+async def test_clone_story_manager_raises_propagates(hass: HomeAssistant):
+    """Test that ValueError from async_clone_story propagates to caller."""
+    story_id = "kitchen"
+    mock_storage = AsyncMock()
+    mock_storage.async_story_exists = AsyncMock(return_value=True)
+    mock_manager = AsyncMock()
+    mock_manager.async_clone_story = AsyncMock(
+        side_effect=ValueError("A story with ID 'kitchen_copy' already exists.")
+    )
+    mock_add_entities = MagicMock()
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {},
+        "entity_callbacks": {story_id: mock_add_entities},
+        "progress_entities": {},
+        "entry_kitchen": {
+            "manager": mock_manager,
+            "storage": mock_storage,
+        },
+    }
+
+    await async_setup_services(hass)
+
+    with pytest.raises(ValueError, match="already exists"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_CLONE_STORY,
+            {"story_id": story_id, "new_story_name": "Kitchen Copy"},
+            blocking=True,
+        )
+
+    # No entities should have been added
+    mock_add_entities.assert_not_called()
+
+
+async def test_clone_story_no_entity_callback_does_not_raise(hass: HomeAssistant):
+    """Test clone_story succeeds (with a warning) when no entity callback exists."""
+    story_id = "kitchen"
+    story_data = {"title": "Kitchen", "description": "", "tasks": []}
+    mock_manager, mock_storage = _make_mock_manager_and_storage_for_clone(
+        story_id, story_data
+    )
+    mock_manager.async_clone_story = AsyncMock(
+        return_value={
+            "story_id": "kitchen_copy",
+            "story_data": {"title": "Kitchen Copy", "description": "", "tasks": []},
+        }
+    )
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {},
+        "entity_callbacks": {},  # No callbacks at all
+        "progress_entities": {},
+        "entry_kitchen": {
+            "manager": mock_manager,
+            "storage": mock_storage,
+        },
+    }
+
+    await async_setup_services(hass)
+
+    # Should not raise; data is persisted even without live entity creation
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_CLONE_STORY,
+        {"story_id": story_id},
+        blocking=True,
+    )
+
+    mock_manager.async_clone_story.assert_called_once_with(story_id, None)
+
+
+async def test_clone_story_registers_callback_for_new_story(hass: HomeAssistant):
+    """Test that clone_story registers the entity callback for the new story_id."""
+    story_id = "kitchen"
+    story_data = {
+        "title": "Kitchen",
+        "description": "",
+        "tasks": [],
+    }
+    mock_manager, mock_storage = _make_mock_manager_and_storage_for_clone(
+        story_id, story_data
+    )
+    mock_manager.async_clone_story = AsyncMock(
+        return_value={
+            "story_id": "kitchen_copy",
+            "story_data": {"title": "Kitchen Copy", "description": "", "tasks": []},
+        }
+    )
+    mock_add_entities = MagicMock()
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {},
+        "entity_callbacks": {story_id: mock_add_entities},
+        "progress_entities": {},
+        "entry_kitchen": {
+            "manager": mock_manager,
+            "storage": mock_storage,
+        },
+    }
+
+    await async_setup_services(hass)
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_CLONE_STORY,
+        {"story_id": story_id, "new_story_name": "Kitchen Copy"},
+        blocking=True,
+    )
+
+    # The new story's callback must be registered so add_task works on the clone too
+    assert "kitchen_copy" in hass.data[DOMAIN]["entity_callbacks"]
+
+
+async def test_clone_story_schema_rejects_missing_story_id(hass: HomeAssistant):
+    """Test clone_story schema rejects call with no story_id."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+    await async_setup_services(hass)
+
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_CLONE_STORY,
+            {},  # Missing required story_id
+            blocking=True,
+        )
+
+
+async def test_clone_story_unloaded_with_last_entry(hass: HomeAssistant):
+    """Test that clone_story service is removed when last entry unloads."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+    await async_setup_services(hass)
+
+    assert hass.services.has_service(DOMAIN, SERVICE_CLONE_STORY)
+
+    await async_unload_services(hass)
+
+    assert not hass.services.has_service(DOMAIN, SERVICE_CLONE_STORY)

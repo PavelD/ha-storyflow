@@ -322,12 +322,88 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 raise
 
         async def clone_story_service(call: ServiceCall) -> None:
-            """Clone a story."""
+            """Clone a story with all tasks reset to todo."""
             story_id = call.data["story_id"]
-            new_title = call.data.get("new_story_name")
+            new_story_name = call.data.get("new_story_name")
 
-            # TODO: Implement - duplicate story with reset tasks
-            _LOGGER.info(f"Cloning story {story_id} to {new_title}")
+            _LOGGER.debug("Service call: clone_story for %s", story_id)
+
+            # Find the manager and storage for this story
+            manager = None
+            storage_handler = None
+            for entry_data in hass.data[DOMAIN].values():
+                if (
+                    isinstance(entry_data, dict)
+                    and "manager" in entry_data
+                    and "storage" in entry_data
+                ):
+                    if await entry_data["storage"].async_story_exists(story_id):
+                        manager = entry_data["manager"]
+                        storage_handler = entry_data["storage"]
+                        break
+
+            if not manager or not storage_handler:
+                _LOGGER.error("No manager found for story '%s'", story_id)
+                raise ValueError(f"Story '{story_id}' not found")
+
+            # Clone the story (validates source, persists new story to storage)
+            result = await manager.async_clone_story(story_id, new_story_name)
+            new_story_id = result["story_id"]
+            new_story_data = result["story_data"]
+
+            # Find an existing async_add_entities callback.
+            # All story entities share the same sensor platform so any callback works.
+            entity_callbacks = hass.data[DOMAIN].get("entity_callbacks", {})
+            async_add_entities = (
+                next(iter(entity_callbacks.values())) if entity_callbacks else None
+            )
+
+            if async_add_entities is None:
+                _LOGGER.warning(
+                    "No entity callback available — cloned story '%s' entities will "
+                    "appear after the next Home Assistant restart",
+                    new_story_id,
+                )
+            else:
+                from .story_progress_entity import StoryProgressEntity
+                from .task_entity import TaskEntity
+
+                new_entities = []
+
+                # Progress entity for the cloned story
+                progress_entity = StoryProgressEntity(
+                    story_id=new_story_id,
+                    tasks=new_story_data.get("tasks", []),
+                )
+                hass.data[DOMAIN]["progress_entities"][new_story_id] = progress_entity
+                new_entities.append(progress_entity)
+
+                # Task entities for the cloned story
+                for task_data in new_story_data.get("tasks", []):
+                    task_entity = TaskEntity(
+                        story_id=new_story_id,
+                        task_id=task_data["id"],
+                        title=task_data["title"],
+                        description=task_data.get("description", ""),
+                        storage_handler=storage_handler,
+                        assigned_to=task_data.get("assigned_to"),
+                        state=task_data.get("state", "todo"),
+                        order=task_data.get("order", 0),
+                    )
+                    new_entities.append(task_entity)
+                    hass.data[DOMAIN]["task_entities"][task_data["id"]] = task_entity
+
+                # Register the callback for the new story so add_task works on it too
+                hass.data[DOMAIN]["entity_callbacks"][new_story_id] = async_add_entities
+
+                # Add all new entities to Home Assistant
+                async_add_entities(new_entities)
+
+            _LOGGER.info(
+                "Successfully cloned story '%s' → '%s'",
+                story_id,
+                new_story_id,
+            )
 
         # Register services
         hass.services.async_register(

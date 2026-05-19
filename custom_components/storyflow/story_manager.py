@@ -272,6 +272,68 @@ class StoryManager:
         # Update via storage
         await self.storage.async_update_task(story_id, task_id, updates)
 
-    def clone_story(self, story_id, new_title):
-        """Clone a story: tasks reset to todo + assigned_to=None."""
-        raise NotImplementedError("clone_story is not implemented yet.")
+    async def async_clone_story(
+        self,
+        story_id: str,
+        new_story_name: str | None = None,
+    ) -> dict:
+        """Clone a story, resetting all tasks to todo and clearing assignments.
+
+        Args:
+            story_id: The story identifier to clone
+            new_story_name: Name for the cloned story. Defaults to
+                            "{original title} (Copy)" if not provided.
+
+        Returns:
+            Dictionary with ``story_id`` and ``story_data`` keys for the new story.
+
+        Raises:
+            ValueError: If source story does not exist or new story_id already exists
+        """
+        # Validate source story exists and load it
+        await self.async_validate_story_exists(story_id)
+        source_data = await self.storage.load_story(story_id)
+
+        # Determine the new story title and id
+        if new_story_name:
+            new_title = new_story_name
+        else:
+            source_title = source_data.get("title", story_id)
+            new_title = f"{source_title} (Copy)"
+
+        new_story_id = new_title.lower().replace(" ", "_")
+
+        # Ensure the new story_id does not clash with an existing one
+        if await self.storage.async_story_exists(new_story_id):
+            raise ValueError(
+                f"A story with ID '{new_story_id}' already exists. "
+                "Provide a unique new_story_name."
+            )
+
+        # Deep-copy tasks: reset state → todo, clear assignment, renumber IDs
+        cloned_tasks = []
+        for order, original_task in enumerate(source_data.get("tasks", [])):
+            cloned_task = {
+                "id": f"{new_story_id}_task_{order}",
+                "title": original_task.get("title", ""),
+                "description": original_task.get("description", ""),
+                "assigned_to": None,
+                "state": "todo",
+                "order": order,
+            }
+            cloned_tasks.append(cloned_task)
+
+        # Build the new story data
+        new_story_data = {
+            "title": new_title,
+            "description": source_data.get("description", ""),
+            "tasks": cloned_tasks,
+        }
+
+        # Persist the cloned story
+        await self.storage.save_story(new_story_id, new_story_data)
+
+        return {
+            "story_id": new_story_id,
+            "story_data": new_story_data,
+        }

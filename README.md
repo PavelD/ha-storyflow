@@ -42,11 +42,12 @@
 - ✅ Progress entity auto-refreshes on task addition and deletion
 - ✅ Delete tasks from stories (`delete_task` service)
 - ✅ Update task title and/or description (`update_task` service)
+- ✅ Clone stories for recurring projects with tasks reset (`clone_story` service)
 
-#### ⏳ Milestone 5: Advanced Features (Planned)
-- Clone stories for recurring projects
+#### ⏳ Milestone 5: Documentation & Examples (Planned)
 - Rich service documentation in Home Assistant UI
 - Example automations and blueprints
+- Interactive Lovelace card examples
 
 ### 🎯 What You Can Do Now
 
@@ -62,10 +63,12 @@
 - ➕ Add new tasks to stories dynamically (`add_task`)
 - 🗑️ Delete tasks from stories (`delete_task`)
 - ✏️ Update task title and/or description (`update_task`)
-- 🔄 Progress entity auto-updates when tasks are added or removed
+- 🔁 Clone stories for recurring projects with tasks reset (`clone_story`)
+- 🔄 Progress entity auto-updates when tasks are added, removed, or when a story is cloned
 
-**⏳ Coming Soon (Next Release):**
-- 🔁 Clone stories for recurring projects (`clone_story`)
+**⏳ Coming Soon (Milestone 5):**
+- 📖 Rich service documentation in Home Assistant UI
+- 📝 Example automations and blueprints
 - 🔔 Send notifications when tasks change state
 
 **💡 Use Cases This Integration is Perfect For:**
@@ -326,16 +329,42 @@ data:
 - `description` (optional): New description for the task
 - At least one of `title` or `description` must be provided
 
-### 🚧 Stub Services (Non-Functional)
-
 #### `storyflow.clone_story`
-**Clone a story** _(Planned for Milestone 5)_
+**Clone a story with all tasks reset**
 
-Currently logs only. Will duplicate stories with all tasks reset to `todo`.
+```yaml
+service: storyflow.clone_story
+data:
+  story_id: "kitchen"
+  new_story_name: "Kitchen Renovation (Round 2)"
+```
 
-### ⏳ Planned for Future Releases
+**Parameters:**
+- `story_id` (required): ID of the story to clone
+- `new_story_name` (optional): Name for the cloned story. Defaults to original name + " (Copy)"
 
-- `storyflow.clone_story` - Clone a story with tasks reset to initial state
+**What happens when you clone a story:**
+1. A new story is created with a unique ID derived from the new name
+2. All tasks are copied with state reset to `todo` and assignments cleared
+3. New sensor entities (tasks + progress) appear in Home Assistant instantly
+
+**Example Automation:**
+```yaml
+automation:
+  - alias: "Clone chore list every Monday"
+    trigger:
+      - platform: time
+        at: "06:00:00"
+    condition:
+      - condition: time
+        weekday:
+          - mon
+    action:
+      - service: storyflow.clone_story
+        data:
+          story_id: "weekly_chores"
+          new_story_name: "Weekly Chores"
+```
 
 ---
 
@@ -394,10 +423,10 @@ pytest --cov=custom_components.storyflow
 
 ### Coming in Next Releases
 
-**Advanced Features** (Milestone 5)
-- 🔁 Clone stories for recurring projects (`clone_story`)
+**Documentation & Examples** (Milestone 5)
 - Rich service documentation in Home Assistant UI
 - Example automations and blueprints
+- Interactive Lovelace card examples
 
 **Future Vision** (Milestone 6+)
 - Interactive Lovelace card with quick actions

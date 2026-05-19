@@ -126,7 +126,11 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 manager = None
                 storage_handler = None
                 for entry_data in hass.data[DOMAIN].values():
-                    if isinstance(entry_data, dict) and "manager" in entry_data:
+                    if (
+                        isinstance(entry_data, dict)
+                        and "manager" in entry_data
+                        and "storage" in entry_data
+                    ):
                         # Check if this manager can handle the story_id
                         if await entry_data["storage"].async_story_exists(story_id):
                             manager = entry_data["manager"]

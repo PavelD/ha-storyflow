@@ -1,3 +1,6 @@
+from .const import TASK_STATES
+
+
 class StoryManager:
     """Handles stories and their tasks with business logic."""
 
@@ -175,21 +178,31 @@ class StoryManager:
         Raises:
             ValueError: If story does not exist or state is invalid
         """
-        await self.async_validate_story_exists(story_id)
-
-        # Validate state
-        valid_states = ["todo", "progress", "review", "done", "rejected"]
-        if state not in valid_states:
+        # Validate state first (cheap, avoids unnecessary storage round-trip)
+        if state not in TASK_STATES:
             raise ValueError(
-                f"Invalid state '{state}'. Must be one of: {', '.join(valid_states)}"
+                f"Invalid state '{state}'. Must be one of: {', '.join(TASK_STATES)}"
             )
 
-        # Generate unique task_id
-        task_id = await self.async_generate_task_id(story_id)
-
-        # Get current tasks to determine order
+        # Validate story exists, then load data in a single round-trip to avoid
+        # a race condition where separate calls to async_generate_task_id and
+        # load_story could see different task lists if a concurrent add happens
+        # between them.
+        await self.async_validate_story_exists(story_id)
         story_data = await self.storage.load_story(story_id)
         tasks = story_data.get("tasks", [])
+
+        # Derive task_id and order from the same snapshot of the task list
+        max_index = -1
+        for existing_task in tasks:
+            existing_id = existing_task.get("id", "")
+            if existing_id.startswith(f"{story_id}_task_"):
+                try:
+                    index = int(existing_id.split("_task_")[-1])
+                    max_index = max(max_index, index)
+                except ValueError:
+                    pass  # Skip malformed task IDs
+        task_id = f"{story_id}_task_{max_index + 1}"
         order = len(tasks)  # New task goes at the end
 
         # Create task data structure

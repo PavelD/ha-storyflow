@@ -39,7 +39,7 @@
 - ✅ Auto-generates unique task IDs within a story
 - ✅ Full state validation (todo, progress, review, done, rejected)
 - ✅ Optional person assignment at task creation
-- ✅ Progress entity auto-refreshed on task addition
+- ✅ Progress entity auto-refreshes on task addition
 - ⏳ Delete completed tasks (Planned)
 - ⏳ Update task details (Planned)
 
@@ -55,7 +55,7 @@
 - 📋 Add tasks with descriptions and assignments
 - 📊 Monitor progress in Lovelace dashboards
 - 👥 Track who's responsible for each task
-- 🔄 View task states (todo, in progress, done, review, rejected)
+- 🔄 View task states (todo, progress, review, done, rejected)
 - 🤖 Update task states via automations (`set_task_state`)
 - 👤 Assign/unassign tasks programmatically (`assign_task`)
 - ⚡ Trigger actions based on task changes

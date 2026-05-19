@@ -584,24 +584,6 @@ async def test_service_reference_count_starts_at_zero(hass: HomeAssistant):
 # =============================================================================
 
 
-def _make_add_task_domain_data(story_id, mock_manager, mock_storage):
-    """Helper to build hass.data[DOMAIN] with proper structure for add_task tests."""
-    mock_progress = MagicMock()
-    mock_progress.tasks = []
-    mock_progress.async_write_ha_state = MagicMock()
-
-    return {
-        "service_ref_count": 0,
-        "entity_callbacks": {story_id: MagicMock()},
-        "task_entities": {},
-        "progress_entities": {story_id: mock_progress},
-        "entry_data": {
-            "manager": mock_manager,
-            "storage": mock_storage,
-        },
-    }
-
-
 @pytest.fixture
 def mock_manager():
     """Create a mock story manager for add_task tests."""
@@ -865,9 +847,7 @@ async def test_add_task_manager_not_found_raises(hass: HomeAssistant):
 
 async def test_add_task_all_valid_states_pass_schema(hass: HomeAssistant):
     """Test add_task service schema accepts all valid state values."""
-    valid_states = ["todo", "progress", "review", "done", "rejected"]
-
-    for state in valid_states:
+    for state in TASK_STATES:
         hass.data[DOMAIN] = {
             "service_ref_count": 0,
             "entity_callbacks": {},  # Will fail at story lookup, but schema is valid
@@ -882,3 +862,48 @@ async def test_add_task_all_valid_states_pass_schema(hass: HomeAssistant):
                 {"story_id": "kitchen", "title": "Task", "state": state},
                 blocking=True,
             )
+
+
+async def test_add_task_manager_raises_value_error(
+    hass: HomeAssistant, mock_manager, mock_add_task_storage
+):
+    """Test add_task service propagates ValueError from manager and leaves state clean.
+
+    Covers the error path where manager.async_add_task raises ValueError (e.g. invalid
+    story or state rejected by business logic). No new entity should be registered and
+    the progress entity must not be refreshed.
+    """
+    mock_manager.async_add_task.side_effect = ValueError("some message")
+
+    mock_progress = MagicMock()
+    mock_progress.tasks = []
+    mock_progress.async_write_ha_state = MagicMock()
+
+    initial_task_entities: dict = {}
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "entity_callbacks": {"kitchen": MagicMock()},
+        "task_entities": initial_task_entities,
+        "progress_entities": {"kitchen": mock_progress},
+        "entry_data": {
+            "manager": mock_manager,
+            "storage": mock_add_task_storage,
+        },
+    }
+    await async_setup_services(hass)
+
+    # The ValueError raised by the manager must propagate to the caller
+    with pytest.raises(ValueError, match="some message"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_ADD_TASK,
+            {"story_id": "kitchen", "title": "Paint walls"},
+            blocking=True,
+        )
+
+    # No new entity must have been added to the task registry
+    assert initial_task_entities == {}
+
+    # Progress entity must NOT have been refreshed
+    mock_progress.async_write_ha_state.assert_not_called()

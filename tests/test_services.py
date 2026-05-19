@@ -451,7 +451,23 @@ async def test_assign_task_logging(hass: HomeAssistant, mock_task_entity):
 
 async def test_clone_story_valid(hass: HomeAssistant):
     """Test clone_story service with valid data."""
-    hass.data[DOMAIN] = {"service_ref_count": 0}
+    mock_manager = MagicMock()
+    mock_manager.async_clone_story = AsyncMock(
+        return_value={
+            "story_id": "Cloned Story",
+            "story_data": {"tasks": []},
+        }
+    )
+    mock_storage = MagicMock()
+    mock_storage.async_story_exists = AsyncMock(return_value=True)
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "entry_data": {
+            "manager": mock_manager,
+            "storage": mock_storage,
+        },
+    }
     await async_setup_services(hass)
 
     with patch("custom_components.storyflow.services._LOGGER") as mock_logger:
@@ -470,7 +486,23 @@ async def test_clone_story_valid(hass: HomeAssistant):
 
 async def test_clone_story_optional_name(hass: HomeAssistant):
     """Test clone_story service with optional new_story_name."""
-    hass.data[DOMAIN] = {"service_ref_count": 0}
+    mock_manager = MagicMock()
+    mock_manager.async_clone_story = AsyncMock(
+        return_value={
+            "story_id": "test_story_copy",
+            "story_data": {"tasks": []},
+        }
+    )
+    mock_storage = MagicMock()
+    mock_storage.async_story_exists = AsyncMock(return_value=True)
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "entry_data": {
+            "manager": mock_manager,
+            "storage": mock_storage,
+        },
+    }
     await async_setup_services(hass)
 
     with patch("custom_components.storyflow.services._LOGGER") as mock_logger:

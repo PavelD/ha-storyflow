@@ -10,7 +10,7 @@
 
 ## 📍 Development Status
 
-**Current Version:** v0.3.0-dev (In Active Development)
+**Current Version:** v0.0.1 (In Active Development)
 
 ### Development Milestones
 
@@ -50,7 +50,7 @@
 
 ### 🎯 What You Can Do Now
 
-**✅ Available Today (v0.3.0-dev):**
+**✅ Available Today:**
 - ✨ Create stories for your home projects
 - 📋 Add tasks with descriptions and assignments
 - 📊 Monitor progress in Lovelace dashboards
@@ -186,7 +186,7 @@ sensor.storyflow_kitchen_progress:
 
 ## 🤖 Services
 
-### ✅ Available Services (v0.3.0-dev)
+### ✅ Available Services
 
 #### `storyflow.add_task`
 **Add a new task to an existing story**
@@ -416,42 +416,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Issues**: [GitHub Issues](https://github.com/PavelD/ha-storyflow/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/PavelD/ha-storyflow/discussions)
-
----
-
-## 📝 Version History
-
-### v0.3.0-dev (Current - In Development)
-- ✅ `add_task` service - Add tasks dynamically to any story
-- ✅ Auto-generated unique task IDs (`{story_id}_task_{n}`)
-- ✅ Full state support: todo, progress, review, done, rejected
-- ✅ Optional person assignment at creation time
-- ✅ Progress entity auto-refreshes on task addition
-- ✅ 142+ automated tests with 90%+ coverage
-- ✅ Updated service schema with review/rejected states
-- 🔄 Milestone 4 (Task Management) Complete
-
-### v0.2.0-dev
-- ✅ Functional automation services
-- ✅ `set_task_state` service - Update task states
-- ✅ `assign_task` service - Assign/unassign tasks
-- ✅ Custom exception framework for error handling
-- ✅ 119 automated tests with 90% coverage
-- ✅ Task state persistence across restarts
-- Milestone 3 (Automation Support) Complete
-
-### v0.1.0-dev
-- Foundation complete (Phase 1)
-- Writable task entities
-- Storage system enhancements
-- Entity state management
-- 113 automated tests
-
-### v0.0.1
-- Initial release
-- MVP infrastructure
-- Display-only functionality
-- Service stubs (non-functional)
 
 ---
 

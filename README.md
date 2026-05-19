@@ -28,13 +28,13 @@
 - Person assignment tracking
 - Comprehensive test coverage (90+ tests)
 
-#### ✅ Milestone 3: Automation Support (Complete - v0.2.0-dev)
+#### ✅ Milestone 3: Automation Support (Complete)
 - ✅ Services for Home Assistant automations
 - ✅ Update task states via automations (`set_task_state`)
 - ✅ Assign tasks to people programmatically (`assign_task`)
 - ✅ Comprehensive error handling with custom exceptions
 
-#### ✅ Milestone 4: Task Management (Complete - v0.3.0-dev)
+#### ✅ Milestone 4: Task Management (Complete)
 - ✅ Add new tasks to existing stories (`add_task` service)
 - ✅ Auto-generates unique task IDs within a story
 - ✅ Full state validation (todo, progress, review, done, rejected)

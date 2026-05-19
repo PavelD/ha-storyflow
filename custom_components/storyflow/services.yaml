@@ -20,7 +20,9 @@ set_task_state:
           options:
             - "todo"
             - "progress"
+            - "review"
             - "done"
+            - "rejected"
 
 assign_task:
   name: Assign Task
@@ -41,6 +43,53 @@ assign_task:
       selector:
         entity:
           domain: person
+
+add_task:
+  name: Add Task
+  description: Add a new task to an existing story
+  fields:
+    story_id:
+      name: Story ID
+      description: The identifier of the story to add the task to
+      required: true
+      example: 'kitchen'
+      selector:
+        text:
+    title:
+      name: Title
+      description: The task title
+      required: true
+      example: 'Paint walls'
+      selector:
+        text:
+    description:
+      name: Description
+      description: Detailed task description (optional)
+      required: false
+      example: 'Choose color and paint the living room walls'
+      selector:
+        text:
+    assigned_to:
+      name: Assigned To
+      description: Person entity ID to assign this task to (optional)
+      required: false
+      example: 'person.john'
+      selector:
+        entity:
+          domain: person
+    state:
+      name: Initial State
+      description: Initial state for the task (defaults to todo)
+      required: false
+      default: 'todo'
+      selector:
+        select:
+          options:
+            - 'todo'
+            - 'progress'
+            - 'review'
+            - 'done'
+            - 'rejected'
 
 clone_story:
   name: Clone Story

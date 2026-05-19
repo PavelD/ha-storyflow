@@ -10,7 +10,7 @@
 
 ## 📍 Development Status
 
-**Current Version:** v0.1.0-dev (In Active Development)
+**Current Version:** v0.3.0-dev (In Active Development)
 
 ### Development Milestones
 
@@ -33,13 +33,15 @@
 - ✅ Update task states via automations (`set_task_state`)
 - ✅ Assign tasks to people programmatically (`assign_task`)
 - ✅ Comprehensive error handling with custom exceptions
-- ⏳ Full documentation in services.yaml (Phase 5)
 
-#### ⏳ Milestone 4: Task Management (Planned)
-- Add new tasks to existing stories
-- Delete completed tasks
-- Update task details
-- Manage tasks dynamically
+#### ✅ Milestone 4: Task Management (Complete - v0.3.0-dev)
+- ✅ Add new tasks to existing stories (`add_task` service)
+- ✅ Auto-generates unique task IDs within a story
+- ✅ Full state validation (todo, progress, review, done, rejected)
+- ✅ Optional person assignment at task creation
+- ✅ Progress entity auto-refreshed on task addition
+- ⏳ Delete completed tasks (Planned)
+- ⏳ Update task details (Planned)
 
 #### ⏳ Milestone 5: Advanced Features (Planned)
 - Clone stories for recurring projects
@@ -48,18 +50,19 @@
 
 ### 🎯 What You Can Do Now
 
-**✅ Available Today (v0.2.0-dev):**
+**✅ Available Today (v0.3.0-dev):**
 - ✨ Create stories for your home projects
 - 📋 Add tasks with descriptions and assignments
 - 📊 Monitor progress in Lovelace dashboards
 - 👥 Track who's responsible for each task
-- 🔄 View task states (todo, in progress, done)
-- 🤖 **NEW!** Update task states via automations
-- 👤 **NEW!** Assign/unassign tasks programmatically
-- ⚡ **NEW!** Trigger actions based on task changes
+- 🔄 View task states (todo, in progress, done, review, rejected)
+- 🤖 Update task states via automations (`set_task_state`)
+- 👤 Assign/unassign tasks programmatically (`assign_task`)
+- ⚡ Trigger actions based on task changes
+- ➕ **NEW!** Add new tasks to stories dynamically (`add_task`)
+- 🔄 **NEW!** Progress entity auto-updates when tasks are added
 
 **⏳ Coming Soon (Next Release):**
-- ➕ Add new tasks to existing stories
 - 🗑️ Delete completed tasks  
 - ✏️ Edit task details (title, description)
 - 🔔 Send notifications when tasks change state
@@ -183,7 +186,47 @@ sensor.storyflow_kitchen_progress:
 
 ## 🤖 Services
 
-### ✅ Available Services (v0.2.0-dev)
+### ✅ Available Services (v0.3.0-dev)
+
+#### `storyflow.add_task`
+**Add a new task to an existing story**
+
+```yaml
+service: storyflow.add_task
+data:
+  story_id: "kitchen"
+  title: "Paint walls"
+  description: "Choose color and paint the living room walls"
+  assigned_to: "person.john"
+  state: "todo"
+```
+
+**Parameters:**
+- `story_id` (required): ID of the story to add the task to (e.g., `kitchen`, `morning_routine`)
+- `title` (required): Title of the new task
+- `description` (optional): Detailed task description
+- `assigned_to` (optional): Person entity ID to assign the task to
+- `state` (optional): Initial state — `todo` (default), `progress`, `review`, `done`, or `rejected`
+
+**What happens when you add a task:**
+1. A unique task ID is generated (e.g., `kitchen_task_3`)
+2. A new sensor entity appears in Home Assistant
+3. The progress entity recalculates and updates instantly
+
+**Example Automation:**
+```yaml
+automation:
+  - alias: "Add weekend task via button press"
+    trigger:
+      - platform: state
+        entity_id: input_button.add_weekend_task
+    action:
+      - service: storyflow.add_task
+        data:
+          story_id: "weekend_chores"
+          title: "Mow the lawn"
+          assigned_to: "person.john"
+```
 
 #### `storyflow.set_task_state`
 **Change the state of a task**
@@ -257,7 +300,6 @@ Currently logs only. Will duplicate stories with reset tasks.
 
 ### ⏳ Planned for Future Releases
 
-- `storyflow.add_task` - Add new tasks to stories
 - `storyflow.update_task` - Update task details
 - `storyflow.delete_task` - Remove tasks from stories
 
@@ -295,7 +337,7 @@ name: Project Progress
 
 Interested in contributing? This integration is actively developed with high-quality standards:
 
-- **119 automated tests** ensure reliability
+- **142+ automated tests** ensure reliability
 - **~90% code coverage** for confidence in changes
 - **Python code quality** enforced with linting and formatting
 
@@ -318,17 +360,10 @@ pytest --cov=custom_components.storyflow
 
 ### Coming in Next Releases
 
-**Automation Services** (Next Release - Milestone 3)
-- Change task states from automations
-- Assign tasks to people automatically
-- Trigger actions based on task progress
-- Example: "When kitchen task is done, send notification"
-
-**Task Management** (Milestone 4)
-- Add new tasks to existing stories
-- Remove completed tasks
-- Edit task descriptions and assignments
-- Update task details on the fly
+**Task Management** (Milestone 4 - Partial)
+- ✅ Add new tasks to existing stories (`add_task`)
+- ⏳ Delete completed tasks
+- ⏳ Edit task details (title, description)
 
 **Advanced Features** (Milestone 5+)
 - Copy stories for recurring projects
@@ -386,14 +421,24 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📝 Version History
 
-### v0.2.0-dev (Current - In Development)
+### v0.3.0-dev (Current - In Development)
+- ✅ `add_task` service - Add tasks dynamically to any story
+- ✅ Auto-generated unique task IDs (`{story_id}_task_{n}`)
+- ✅ Full state support: todo, progress, review, done, rejected
+- ✅ Optional person assignment at creation time
+- ✅ Progress entity auto-refreshes on task addition
+- ✅ 142+ automated tests with 90%+ coverage
+- ✅ Updated service schema with review/rejected states
+- 🔄 Milestone 4 (Task Management) Complete
+
+### v0.2.0-dev
 - ✅ Functional automation services
 - ✅ `set_task_state` service - Update task states
 - ✅ `assign_task` service - Assign/unassign tasks
 - ✅ Custom exception framework for error handling
 - ✅ 119 automated tests with 90% coverage
 - ✅ Task state persistence across restarts
-- 🔄 Phase 2 Complete (30% overall progress)
+- Milestone 3 (Automation Support) Complete
 
 ### v0.1.0-dev
 - Foundation complete (Phase 1)

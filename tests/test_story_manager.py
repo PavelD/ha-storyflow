@@ -303,3 +303,235 @@ async def test_state_transitions_all_allowed(story_manager, mock_storage):
         mock_storage.async_update_task.assert_called_with(
             "story1", "task1", {"state": to_state}
         )
+
+
+# =============================================================================
+# Tests for async_generate_task_id
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_generate_task_id_empty_story(story_manager, mock_storage):
+    """Test task ID generation when story has no tasks."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.load_story.return_value = {"title": "Test", "tasks": []}
+
+    task_id = await story_manager.async_generate_task_id("kitchen")
+
+    assert task_id == "kitchen_task_0"
+
+
+@pytest.mark.asyncio
+async def test_generate_task_id_with_existing_tasks(story_manager, mock_storage):
+    """Test task ID generation increments beyond existing tasks."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.load_story.return_value = {
+        "title": "Test",
+        "tasks": [
+            {"id": "kitchen_task_0", "title": "Task 0"},
+            {"id": "kitchen_task_1", "title": "Task 1"},
+        ],
+    }
+
+    task_id = await story_manager.async_generate_task_id("kitchen")
+
+    assert task_id == "kitchen_task_2"
+
+
+@pytest.mark.asyncio
+async def test_generate_task_id_with_gaps_in_numbering(story_manager, mock_storage):
+    """Test task ID generation uses max index + 1 (handles gaps)."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.load_story.return_value = {
+        "title": "Test",
+        "tasks": [
+            {"id": "kitchen_task_0", "title": "Task 0"},
+            {"id": "kitchen_task_5", "title": "Task 5"},  # Gap: 1-4 missing
+        ],
+    }
+
+    task_id = await story_manager.async_generate_task_id("kitchen")
+
+    assert task_id == "kitchen_task_6"
+
+
+@pytest.mark.asyncio
+async def test_generate_task_id_ignores_malformed_ids(story_manager, mock_storage):
+    """Test task ID generation ignores tasks with malformed IDs."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.load_story.return_value = {
+        "title": "Test",
+        "tasks": [
+            {"id": "kitchen_task_0", "title": "Task 0"},
+            {"id": "malformed_id", "title": "Malformed"},
+            {"id": "kitchen_task_bad", "title": "Non-numeric"},
+        ],
+    }
+
+    task_id = await story_manager.async_generate_task_id("kitchen")
+
+    assert task_id == "kitchen_task_1"
+
+
+@pytest.mark.asyncio
+async def test_generate_task_id_story_not_found(story_manager, mock_storage):
+    """Test task ID generation raises ValueError when story not found."""
+    mock_storage.async_story_exists.return_value = False
+
+    with pytest.raises(ValueError, match="Story 'unknown_story' not found"):
+        await story_manager.async_generate_task_id("unknown_story")
+
+
+# =============================================================================
+# Tests for async_add_task
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_add_task_success_all_fields(story_manager, mock_storage):
+    """Test adding a task with all fields provided."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.load_story.return_value = {
+        "title": "Kitchen",
+        "tasks": [{"id": "kitchen_task_0", "title": "Existing"}],
+    }
+    mock_storage.async_add_task.return_value = None
+
+    result = await story_manager.async_add_task(
+        story_id="kitchen",
+        title="Paint walls",
+        description="Choose color and paint",
+        assigned_to="person.john",
+        state="progress",
+    )
+
+    assert result["id"] == "kitchen_task_1"
+    assert result["title"] == "Paint walls"
+    assert result["description"] == "Choose color and paint"
+    assert result["assigned_to"] == "person.john"
+    assert result["state"] == "progress"
+    assert result["order"] == 1  # Second task, index 1
+
+    mock_storage.async_add_task.assert_called_once_with("kitchen", result)
+
+
+@pytest.mark.asyncio
+async def test_add_task_success_minimal_fields(story_manager, mock_storage):
+    """Test adding a task with only required fields (title, story_id)."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.load_story.return_value = {"title": "Kitchen", "tasks": []}
+    mock_storage.async_add_task.return_value = None
+
+    result = await story_manager.async_add_task(
+        story_id="kitchen",
+        title="Buy materials",
+    )
+
+    assert result["id"] == "kitchen_task_0"
+    assert result["title"] == "Buy materials"
+    assert result["description"] == ""
+    assert result["assigned_to"] is None
+    assert result["state"] == "todo"
+    assert result["order"] == 0
+
+
+@pytest.mark.asyncio
+async def test_add_task_default_state_is_todo(story_manager, mock_storage):
+    """Test that default state is 'todo' when not specified."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.load_story.return_value = {"title": "Test", "tasks": []}
+    mock_storage.async_add_task.return_value = None
+
+    result = await story_manager.async_add_task(story_id="myStory", title="New Task")
+
+    assert result["state"] == "todo"
+
+
+@pytest.mark.asyncio
+async def test_add_task_all_valid_states(story_manager, mock_storage):
+    """Test adding a task with each valid state."""
+    valid_states = ["todo", "progress", "review", "done", "rejected"]
+
+    for state in valid_states:
+        mock_storage.async_story_exists.return_value = True
+        mock_storage.load_story.return_value = {"title": "Test", "tasks": []}
+        mock_storage.async_add_task.return_value = None
+
+        result = await story_manager.async_add_task(
+            story_id="myStory",
+            title="Task",
+            state=state,
+        )
+
+        assert result["state"] == state, f"Failed for state: {state}"
+
+
+@pytest.mark.asyncio
+async def test_add_task_invalid_state(story_manager, mock_storage):
+    """Test adding a task with an invalid state raises ValueError."""
+    mock_storage.async_story_exists.return_value = True
+
+    with pytest.raises(ValueError, match="Invalid state 'blocked'"):
+        await story_manager.async_add_task(
+            story_id="kitchen",
+            title="Paint walls",
+            state="blocked",
+        )
+
+    # Storage should not be called when state is invalid
+    mock_storage.async_add_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_add_task_story_not_found(story_manager, mock_storage):
+    """Test adding a task to a non-existent story raises ValueError."""
+    mock_storage.async_story_exists.return_value = False
+
+    with pytest.raises(ValueError, match="Story 'unknown' not found"):
+        await story_manager.async_add_task(
+            story_id="unknown",
+            title="Task",
+        )
+
+    mock_storage.async_add_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_add_task_order_reflects_current_task_count(story_manager, mock_storage):
+    """Test that the order field equals the current number of existing tasks."""
+    mock_storage.async_story_exists.return_value = True
+    existing_tasks = [
+        {"id": "story_task_0", "title": "Task 0"},
+        {"id": "story_task_1", "title": "Task 1"},
+        {"id": "story_task_2", "title": "Task 2"},
+    ]
+    mock_storage.load_story.return_value = {
+        "title": "My Story",
+        "tasks": existing_tasks,
+    }
+    mock_storage.async_add_task.return_value = None
+
+    result = await story_manager.async_add_task(
+        story_id="story",
+        title="New Task",
+    )
+
+    assert result["order"] == 3  # 3 existing tasks → order index 3
+
+
+@pytest.mark.asyncio
+async def test_add_task_persists_to_storage(story_manager, mock_storage):
+    """Test that async_add_task calls storage to persist the task."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.load_story.return_value = {"title": "Test", "tasks": []}
+    mock_storage.async_add_task.return_value = None
+
+    await story_manager.async_add_task(story_id="mystory", title="New Task")
+
+    # Verify storage was called with correct task data
+    mock_storage.async_add_task.assert_called_once()
+    call_args = mock_storage.async_add_task.call_args
+    assert call_args[0][0] == "mystory"
+    task_data = call_args[0][1]
+    assert task_data["id"] == "mystory_task_0"
+    assert task_data["title"] == "New Task"

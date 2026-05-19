@@ -10,6 +10,7 @@ from custom_components.storyflow.services import (
     async_unload_services,
     SERVICE_SET_STATE,
     SERVICE_ASSIGN,
+    SERVICE_ADD_TASK,
     SERVICE_CLONE_STORY,
 )
 from custom_components.storyflow.const import DOMAIN, TASK_STATES
@@ -43,15 +44,16 @@ def mock_storage_handler():
 
 
 async def test_services_registered(hass: HomeAssistant):
-    """Test that services are registered correctly."""
+    """Test that all services are registered correctly."""
     # Initialize domain data
     hass.data[DOMAIN] = {"service_ref_count": 0}
 
     await async_setup_services(hass)
 
-    # Verify all three services are registered
+    # Verify all services are registered
     assert hass.services.has_service(DOMAIN, SERVICE_SET_STATE)
     assert hass.services.has_service(DOMAIN, SERVICE_ASSIGN)
+    assert hass.services.has_service(DOMAIN, SERVICE_ADD_TASK)
     assert hass.services.has_service(DOMAIN, SERVICE_CLONE_STORY)
 
 
@@ -490,6 +492,7 @@ async def test_unload_services(hass: HomeAssistant):
     # Verify services are registered
     assert hass.services.has_service(DOMAIN, SERVICE_SET_STATE)
     assert hass.services.has_service(DOMAIN, SERVICE_ASSIGN)
+    assert hass.services.has_service(DOMAIN, SERVICE_ADD_TASK)
     assert hass.services.has_service(DOMAIN, SERVICE_CLONE_STORY)
 
     # Unload services
@@ -498,6 +501,7 @@ async def test_unload_services(hass: HomeAssistant):
     # Verify services are removed
     assert not hass.services.has_service(DOMAIN, SERVICE_SET_STATE)
     assert not hass.services.has_service(DOMAIN, SERVICE_ASSIGN)
+    assert not hass.services.has_service(DOMAIN, SERVICE_ADD_TASK)
     assert not hass.services.has_service(DOMAIN, SERVICE_CLONE_STORY)
 
 
@@ -573,3 +577,308 @@ async def test_service_reference_count_starts_at_zero(hass: HomeAssistant):
     await async_setup_services(hass)
     assert hass.data[DOMAIN]["service_ref_count"] == 1
     assert hass.services.has_service(DOMAIN, SERVICE_SET_STATE)
+
+
+# =============================================================================
+# Tests for add_task service
+# =============================================================================
+
+
+def _make_add_task_domain_data(story_id, mock_manager, mock_storage):
+    """Helper to build hass.data[DOMAIN] with proper structure for add_task tests."""
+    mock_progress = MagicMock()
+    mock_progress.tasks = []
+    mock_progress.async_write_ha_state = MagicMock()
+
+    return {
+        "service_ref_count": 0,
+        "entity_callbacks": {story_id: MagicMock()},
+        "task_entities": {},
+        "progress_entities": {story_id: mock_progress},
+        "entry_data": {
+            "manager": mock_manager,
+            "storage": mock_storage,
+        },
+    }
+
+
+@pytest.fixture
+def mock_manager():
+    """Create a mock story manager for add_task tests."""
+    manager = MagicMock()
+    manager.async_add_task = AsyncMock(
+        return_value={
+            "id": "kitchen_task_1",
+            "title": "Paint walls",
+            "description": "Choose color",
+            "assigned_to": None,
+            "state": "todo",
+            "order": 1,
+        }
+    )
+    return manager
+
+
+@pytest.fixture
+def mock_add_task_storage():
+    """Create a mock storage handler for add_task tests."""
+    storage = AsyncMock()
+    storage.async_story_exists = AsyncMock(return_value=True)
+    storage.load_story = AsyncMock(
+        return_value={
+            "title": "Kitchen",
+            "tasks": [{"id": "kitchen_task_0", "title": "Existing task"}],
+        }
+    )
+    return storage
+
+
+async def test_add_task_story_not_in_callbacks(hass: HomeAssistant):
+    """Test add_task raises ValueError when story has no entity callback."""
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "entity_callbacks": {},  # No callback for this story
+        "task_entities": {},
+        "progress_entities": {},
+    }
+    await async_setup_services(hass)
+
+    with pytest.raises(ValueError, match="Story 'unknown_story' not found"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_ADD_TASK,
+            {"story_id": "unknown_story", "title": "New task"},
+            blocking=True,
+        )
+
+
+async def test_add_task_missing_required_fields(hass: HomeAssistant):
+    """Test add_task service schema requires story_id and title."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+    await async_setup_services(hass)
+
+    # Missing title
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_ADD_TASK,
+            {"story_id": "kitchen"},
+            blocking=True,
+        )
+
+    # Missing story_id
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_ADD_TASK,
+            {"title": "Paint walls"},
+            blocking=True,
+        )
+
+
+async def test_add_task_invalid_state_schema(hass: HomeAssistant):
+    """Test add_task service schema rejects invalid state values."""
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+    await async_setup_services(hass)
+
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_ADD_TASK,
+            {"story_id": "kitchen", "title": "Paint walls", "state": "blocked"},
+            blocking=True,
+        )
+
+
+async def test_add_task_success_creates_entity(
+    hass: HomeAssistant, mock_manager, mock_add_task_storage
+):
+    """Test add_task service successfully creates and registers an entity."""
+    add_entities_calls = []
+
+    def mock_add_entities(entities):
+        add_entities_calls.extend(entities)
+
+    mock_progress = MagicMock()
+    mock_progress.tasks = []
+    mock_progress.async_write_ha_state = MagicMock()
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "entity_callbacks": {"kitchen": mock_add_entities},
+        "task_entities": {},
+        "progress_entities": {"kitchen": mock_progress},
+        "entry_data": {
+            "manager": mock_manager,
+            "storage": mock_add_task_storage,
+        },
+    }
+    await async_setup_services(hass)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_ADD_TASK,
+        {"story_id": "kitchen", "title": "Paint walls"},
+        blocking=True,
+    )
+
+    # Verify manager was called
+    mock_manager.async_add_task.assert_called_once()
+    call_kwargs = mock_manager.async_add_task.call_args[1]
+    assert call_kwargs["story_id"] == "kitchen"
+    assert call_kwargs["title"] == "Paint walls"
+
+    # Verify entity was registered
+    assert len(add_entities_calls) == 1
+    assert "kitchen_task_1" in hass.data[DOMAIN]["task_entities"]
+
+
+async def test_add_task_success_updates_progress(
+    hass: HomeAssistant, mock_manager, mock_add_task_storage
+):
+    """Test add_task service updates progress entity after task creation."""
+    mock_progress = MagicMock()
+    mock_progress.tasks = []
+    mock_progress.async_write_ha_state = MagicMock()
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "entity_callbacks": {"kitchen": MagicMock()},
+        "task_entities": {},
+        "progress_entities": {"kitchen": mock_progress},
+        "entry_data": {
+            "manager": mock_manager,
+            "storage": mock_add_task_storage,
+        },
+    }
+    await async_setup_services(hass)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_ADD_TASK,
+        {"story_id": "kitchen", "title": "Paint walls"},
+        blocking=True,
+    )
+
+    # Verify progress entity was refreshed
+    mock_progress.async_write_ha_state.assert_called_once()
+
+
+async def test_add_task_with_all_optional_fields(
+    hass: HomeAssistant, mock_manager, mock_add_task_storage
+):
+    """Test add_task service passes all optional fields to manager."""
+    mock_manager.async_add_task = AsyncMock(
+        return_value={
+            "id": "kitchen_task_1",
+            "title": "Paint walls",
+            "description": "Choose color and paint",
+            "assigned_to": "person.john",
+            "state": "progress",
+            "order": 1,
+        }
+    )
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "entity_callbacks": {"kitchen": MagicMock()},
+        "task_entities": {},
+        "progress_entities": {"kitchen": MagicMock()},
+        "entry_data": {
+            "manager": mock_manager,
+            "storage": mock_add_task_storage,
+        },
+    }
+    await async_setup_services(hass)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_ADD_TASK,
+        {
+            "story_id": "kitchen",
+            "title": "Paint walls",
+            "description": "Choose color and paint",
+            "assigned_to": "person.john",
+            "state": "progress",
+        },
+        blocking=True,
+    )
+
+    # Verify manager was called with all fields
+    mock_manager.async_add_task.assert_called_once_with(
+        story_id="kitchen",
+        title="Paint walls",
+        description="Choose color and paint",
+        assigned_to="person.john",
+        state="progress",
+    )
+
+
+async def test_add_task_default_state_passed_to_manager(
+    hass: HomeAssistant, mock_manager, mock_add_task_storage
+):
+    """Test add_task service uses 'todo' as default state."""
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "entity_callbacks": {"kitchen": MagicMock()},
+        "task_entities": {},
+        "progress_entities": {"kitchen": MagicMock()},
+        "entry_data": {
+            "manager": mock_manager,
+            "storage": mock_add_task_storage,
+        },
+    }
+    await async_setup_services(hass)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_ADD_TASK,
+        {"story_id": "kitchen", "title": "New task"},
+        blocking=True,
+    )
+
+    call_kwargs = mock_manager.async_add_task.call_args[1]
+    assert call_kwargs["state"] == "todo"
+    assert call_kwargs["description"] == ""
+    assert call_kwargs["assigned_to"] is None
+
+
+async def test_add_task_manager_not_found_raises(hass: HomeAssistant):
+    """Test add_task raises ValueError when no manager entry found for story."""
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "entity_callbacks": {"kitchen": MagicMock()},
+        "task_entities": {},
+        "progress_entities": {},
+        # No entry_data with manager + matching storage
+    }
+    await async_setup_services(hass)
+
+    with pytest.raises(ValueError, match="Story 'kitchen' not found"):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_ADD_TASK,
+            {"story_id": "kitchen", "title": "Paint walls"},
+            blocking=True,
+        )
+
+
+async def test_add_task_all_valid_states_pass_schema(hass: HomeAssistant):
+    """Test add_task service schema accepts all valid state values."""
+    valid_states = ["todo", "progress", "review", "done", "rejected"]
+
+    for state in valid_states:
+        hass.data[DOMAIN] = {
+            "service_ref_count": 0,
+            "entity_callbacks": {},  # Will fail at story lookup, but schema is valid
+        }
+        await async_setup_services(hass)
+
+        # Schema should not raise - ValueError from story lookup is expected
+        with pytest.raises(ValueError):
+            await hass.services.async_call(
+                DOMAIN,
+                SERVICE_ADD_TASK,
+                {"story_id": "kitchen", "title": "Task", "state": state},
+                blocking=True,
+            )

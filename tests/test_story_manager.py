@@ -978,3 +978,43 @@ async def test_clone_story_preserves_task_content(story_manager, mock_storage):
     task = result["story_data"]["tasks"][0]
     assert task["title"] == "Paint walls"
     assert task["description"] == "Use white paint"
+
+
+@pytest.mark.asyncio
+async def test_clone_story_deep_copy_semantics(story_manager, mock_storage):
+    """Test that cloned story data does not share references with the original.
+
+    Mutating the cloned result must not affect the original source data that
+    was returned by the storage layer, ensuring the clone operation performs a
+    deep copy rather than a shallow one.
+    """
+    original_story_data = {
+        "title": "Kitchen",
+        "description": "Original description",
+        "tasks": [
+            {
+                "id": "kitchen_task_0",
+                "title": "Original Task",
+                "description": "Original desc",
+                "assigned_to": "person.john",
+                "state": "done",
+                "order": 0,
+            }
+        ],
+    }
+
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.load_story.return_value = original_story_data
+    mock_storage.save_story.return_value = None
+
+    result = await story_manager.async_clone_story("kitchen", "Kitchen Copy")
+
+    # Mutate the cloned data
+    result["story_data"]["tasks"][0]["title"] = "MUTATED TITLE"
+    result["story_data"]["tasks"][0]["state"] = "MUTATED STATE"
+    result["story_data"]["tasks"][0]["description"] = "MUTATED DESC"
+
+    # Verify original source data is unchanged (deep copy semantics)
+    assert original_story_data["tasks"][0]["title"] == "Original Task"
+    assert original_story_data["tasks"][0]["state"] == "done"
+    assert original_story_data["tasks"][0]["description"] == "Original desc"

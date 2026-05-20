@@ -305,15 +305,26 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 _LOGGER.error("Task '%s' not found", task_id)
                 raise TaskNotFoundError(task_id)
 
+            story_id = task_entity.story_id
+
             try:
-                # Build the updates dict (only include provided fields)
+                # Find the manager for this story (centralised validation + persistence)
+                manager, _ = await _get_manager_and_storage_for_story(hass, story_id)
+
+                # Delegate validation and persistence to StoryManager
+                await manager.async_update_task_details(
+                    story_id=story_id,
+                    task_id=task_id,
+                    title=title,
+                    description=description,
+                )
+
+                # Sync HA entity state (title/description display only, no re-validation)
                 updates = {}
                 if title is not None:
                     updates["title"] = title
                 if description is not None:
                     updates["description"] = description
-
-                # Update entity attributes (persists to storage + updates HA state)
                 await task_entity.async_update_attributes(**updates)
 
                 _LOGGER.info(
@@ -343,12 +354,12 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             new_story_id = result["story_id"]
             new_story_data = result["story_data"]
 
-            # Find an existing async_add_entities callback.
-            # All story entities share the same sensor platform so any callback works.
+            # Re-use the source story's entity callback for the clone.
+            # This avoids picking an arbitrary callback when multiple config
+            # entries / platforms are registered and guarantees the clone is
+            # added to the same platform as the original story.
             entity_callbacks = hass.data[DOMAIN].get("entity_callbacks", {})
-            async_add_entities = (
-                next(iter(entity_callbacks.values())) if entity_callbacks else None
-            )
+            async_add_entities = entity_callbacks.get(story_id)
 
             if async_add_entities is None:
                 _LOGGER.warning(

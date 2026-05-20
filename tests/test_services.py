@@ -17,6 +17,7 @@ from custom_components.storyflow.services import (
 )
 from custom_components.storyflow.const import DOMAIN, TASK_STATES
 from custom_components.storyflow.exceptions import TaskNotFoundError
+from custom_components.storyflow.task_entity import get_task_unique_id
 
 
 @pytest.fixture
@@ -1089,6 +1090,13 @@ async def test_delete_task_removes_entity_from_registry(
             blocking=True,
         )
 
+        # Verify the entity was resolved via the expected unique_id (locks in
+        # the contract with get_task_unique_id so format changes are caught)
+        expected_unique_id = get_task_unique_id(task_id)
+        mock_reg.async_get_entity_id.assert_called_once_with(
+            "sensor", DOMAIN, expected_unique_id
+        )
+
         # Entity registry remove should be called with the found entity_id
         mock_reg.async_remove.assert_called_once_with(ha_entity_id)
 
@@ -1300,6 +1308,22 @@ async def test_unload_services_removes_delete_and_update(hass: HomeAssistant):
 
 
 @pytest.fixture
+def mock_update_manager():
+    """Create a mock manager for update_task tests."""
+    manager = MagicMock()
+    manager.async_update_task_details = AsyncMock()
+    return manager
+
+
+@pytest.fixture
+def mock_update_storage():
+    """Create a mock storage handler for update_task tests."""
+    storage = MagicMock()
+    storage.async_story_exists = AsyncMock(return_value=True)
+    return storage
+
+
+@pytest.fixture
 def mock_task_entity_for_update():
     """Create a mock task entity for update_task tests."""
     entity = MagicMock()
@@ -1311,13 +1335,19 @@ def mock_task_entity_for_update():
     return entity
 
 
-async def test_update_task_title_only(hass: HomeAssistant, mock_task_entity_for_update):
+async def test_update_task_title_only(
+    hass: HomeAssistant,
+    mock_task_entity_for_update,
+    mock_update_manager,
+    mock_update_storage,
+):
     """Test update_task service updates only the title."""
     task_id = "kitchen_task_0"
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {task_id: mock_task_entity_for_update},
+        "entry_data": {"manager": mock_update_manager, "storage": mock_update_storage},
     }
     await async_setup_services(hass)
 
@@ -1328,13 +1358,19 @@ async def test_update_task_title_only(hass: HomeAssistant, mock_task_entity_for_
         blocking=True,
     )
 
+    mock_update_manager.async_update_task_details.assert_called_once_with(
+        story_id="kitchen", task_id=task_id, title="New Title", description=None
+    )
     mock_task_entity_for_update.async_update_attributes.assert_called_once_with(
         title="New Title"
     )
 
 
 async def test_update_task_description_only(
-    hass: HomeAssistant, mock_task_entity_for_update
+    hass: HomeAssistant,
+    mock_task_entity_for_update,
+    mock_update_manager,
+    mock_update_storage,
 ):
     """Test update_task service updates only the description."""
     task_id = "kitchen_task_0"
@@ -1342,6 +1378,7 @@ async def test_update_task_description_only(
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {task_id: mock_task_entity_for_update},
+        "entry_data": {"manager": mock_update_manager, "storage": mock_update_storage},
     }
     await async_setup_services(hass)
 
@@ -1352,13 +1389,19 @@ async def test_update_task_description_only(
         blocking=True,
     )
 
+    mock_update_manager.async_update_task_details.assert_called_once_with(
+        story_id="kitchen", task_id=task_id, title=None, description="New description"
+    )
     mock_task_entity_for_update.async_update_attributes.assert_called_once_with(
         description="New description"
     )
 
 
 async def test_update_task_both_fields(
-    hass: HomeAssistant, mock_task_entity_for_update
+    hass: HomeAssistant,
+    mock_task_entity_for_update,
+    mock_update_manager,
+    mock_update_storage,
 ):
     """Test update_task service updates both title and description."""
     task_id = "kitchen_task_0"
@@ -1366,6 +1409,7 @@ async def test_update_task_both_fields(
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {task_id: mock_task_entity_for_update},
+        "entry_data": {"manager": mock_update_manager, "storage": mock_update_storage},
     }
     await async_setup_services(hass)
 
@@ -1376,6 +1420,9 @@ async def test_update_task_both_fields(
         blocking=True,
     )
 
+    mock_update_manager.async_update_task_details.assert_called_once_with(
+        story_id="kitchen", task_id=task_id, title="New Title", description="New Desc"
+    )
     mock_task_entity_for_update.async_update_attributes.assert_called_once_with(
         title="New Title", description="New Desc"
     )
@@ -1428,17 +1475,21 @@ async def test_update_task_task_not_found(hass: HomeAssistant):
 
 
 async def test_update_task_storage_failure_propagates(
-    hass: HomeAssistant, mock_task_entity_for_update
+    hass: HomeAssistant,
+    mock_task_entity_for_update,
+    mock_update_manager,
+    mock_update_storage,
 ):
-    """Test update_task propagates ValueError from entity update."""
+    """Test update_task propagates ValueError from StoryManager."""
     task_id = "kitchen_task_0"
-    mock_task_entity_for_update.async_update_attributes.side_effect = ValueError(
+    mock_update_manager.async_update_task_details.side_effect = ValueError(
         "Storage error"
     )
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {task_id: mock_task_entity_for_update},
+        "entry_data": {"manager": mock_update_manager, "storage": mock_update_storage},
     }
     await async_setup_services(hass)
 
@@ -1449,6 +1500,9 @@ async def test_update_task_storage_failure_propagates(
             {"task_id": task_id, "title": "New Title"},
             blocking=True,
         )
+
+    # Entity state must NOT be updated when manager raises
+    mock_task_entity_for_update.async_update_attributes.assert_not_called()
 
 
 async def test_update_task_missing_task_id_field(hass: HomeAssistant):
@@ -1466,7 +1520,10 @@ async def test_update_task_missing_task_id_field(hass: HomeAssistant):
 
 
 async def test_update_task_entity_state_reflects_update(
-    hass: HomeAssistant, mock_task_entity_for_update
+    hass: HomeAssistant,
+    mock_task_entity_for_update,
+    mock_update_manager,
+    mock_update_storage,
 ):
     """Test update_task correctly passes only provided fields to entity."""
     task_id = "kitchen_task_0"
@@ -1474,6 +1531,7 @@ async def test_update_task_entity_state_reflects_update(
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {task_id: mock_task_entity_for_update},
+        "entry_data": {"manager": mock_update_manager, "storage": mock_update_storage},
     }
     await async_setup_services(hass)
 

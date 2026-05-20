@@ -1,3 +1,5 @@
+import re
+
 from .const import TASK_STATES
 
 
@@ -14,9 +16,24 @@ class StoryManager:
         self.storage = storage_handler
         self.hass = hass
 
+    def _generate_story_id(self, title: str) -> str:
+        """Generate a normalized, stable story_id from a human-readable title.
+
+        - Lowercase
+        - Collapse whitespace
+        - Replace non-alphanumeric characters with underscores
+        - Collapse repeated underscores
+        - Strip leading/trailing underscores
+        """
+        slug = title.strip().lower()
+        slug = re.sub(r"\s+", " ", slug)
+        slug = re.sub(r"[^\w]+", "_", slug)
+        slug = re.sub(r"_+", "_", slug).strip("_")
+        return slug or "story"
+
     async def create_story(self, title, description, tasks):
         """Create a new story and save it to storage."""
-        story_id = title.lower().replace(" ", "_")
+        story_id = self._generate_story_id(title)
         data = {
             "title": title,
             "description": description,
@@ -301,7 +318,7 @@ class StoryManager:
             source_title = source_data.get("title", story_id)
             new_title = f"{source_title} (Copy)"
 
-        new_story_id = new_title.lower().replace(" ", "_")
+        new_story_id = self._generate_story_id(new_title)
 
         # Ensure the new story_id does not clash with an existing one
         if await self.storage.async_story_exists(new_story_id):

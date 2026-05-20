@@ -367,8 +367,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
             if async_add_entities is None:
                 _LOGGER.warning(
-                    "No entity callback available — cloned story '%s' entities will "
-                    "appear after the next Home Assistant restart",
+                    "No entity callback is currently registered for story '%s'; "
+                    "entities for cloned story '%s' will only be added once the "
+                    "corresponding platform is loaded or reloaded",
+                    story_id,
                     new_story_id,
                 )
             else:

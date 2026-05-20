@@ -72,9 +72,9 @@ async def test_async_setup_entry_creates_entities(hass: HomeAssistant):
 
         assert result is True
 
-        # Verify manager was created and stored
+        # Verify manager was created and stored under the "entries" key
         assert DOMAIN in hass.data
-        assert entry.entry_id in hass.data[DOMAIN]
+        assert entry.entry_id in hass.data[DOMAIN]["entries"]
 
         # Verify create_story was called
         mock_manager_instance.create_story.assert_called_once_with(
@@ -152,8 +152,8 @@ async def test_async_unload_entry_cleans_up(hass: HomeAssistant):
 
         await async_setup_entry(hass, entry)
 
-        # Verify data was stored
-        assert entry.entry_id in hass.data[DOMAIN]
+        # Verify data was stored under the "entries" key
+        assert entry.entry_id in hass.data[DOMAIN]["entries"]
 
         # Mock platform unload
         with patch.object(
@@ -164,8 +164,8 @@ async def test_async_unload_entry_cleans_up(hass: HomeAssistant):
 
             assert result is True
 
-            # Verify data was removed
-            assert entry.entry_id not in hass.data[DOMAIN]
+            # Verify data was removed from "entries"
+            assert entry.entry_id not in hass.data[DOMAIN].get("entries", {})
 
             # Verify services were unloaded
             mock_unload.assert_called_once()
@@ -262,13 +262,14 @@ async def test_multiple_entries_same_hass_data(hass: HomeAssistant):
         await async_setup_entry(hass, entry1)
         await async_setup_entry(hass, entry2)
 
-        # Verify both are stored
-        assert entry1.entry_id in hass.data[DOMAIN]
-        assert entry2.entry_id in hass.data[DOMAIN]
+        # Verify both are stored under "entries"
+        assert entry1.entry_id in hass.data[DOMAIN]["entries"]
+        assert entry2.entry_id in hass.data[DOMAIN]["entries"]
 
         # Verify they're separate instances
         assert (
-            hass.data[DOMAIN][entry1.entry_id] is not hass.data[DOMAIN][entry2.entry_id]
+            hass.data[DOMAIN]["entries"][entry1.entry_id]
+            is not hass.data[DOMAIN]["entries"][entry2.entry_id]
         )
 
 
@@ -449,7 +450,7 @@ async def test_entities_registered_during_setup(hass: HomeAssistant):
         task_entities = hass.data[DOMAIN]["task_entities"]
 
         # Create mock entities (sensor.py will do this in reality)
-        storage_handler = hass.data[DOMAIN][entry.entry_id]["storage"]
+        storage_handler = hass.data[DOMAIN]["entries"][entry.entry_id]["storage"]
         for idx, task in enumerate(entry.data["tasks"]):
             task_id = f"test_story_task_{idx}"
             task_entity = TaskEntity(

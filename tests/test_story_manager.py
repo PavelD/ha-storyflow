@@ -1003,7 +1003,10 @@ async def test_clone_story_deep_copy_semantics(story_manager, mock_storage):
         ],
     }
 
-    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_story_exists.side_effect = [
+        True,  # source story "kitchen" exists
+        False,  # target story "kitchen_copy" does not yet exist
+    ]
     mock_storage.load_story.return_value = original_story_data
     mock_storage.save_story.return_value = None
 

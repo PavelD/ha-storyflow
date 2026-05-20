@@ -1173,6 +1173,49 @@ async def test_delete_task_no_progress_entity_no_error(
     mock_delete_manager.async_delete_task.assert_called_once()
 
 
+async def test_delete_task_story_not_found(
+    hass: HomeAssistant,
+    mock_delete_manager,
+    mock_delete_storage,
+    mock_task_entity_for_delete,
+) -> None:
+    """Test delete_task raises ValueError when no story/entry_data can be resolved.
+
+    The task exists in the registry but the underlying storage returns False for
+    async_story_exists, so _get_manager_and_storage_for_story raises ValueError.
+    """
+    task_id = mock_task_entity_for_delete.task_id
+
+    # Make storage unable to find the story
+    mock_delete_storage.async_story_exists = AsyncMock(return_value=False)
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {task_id: mock_task_entity_for_delete},
+        "progress_entities": {},
+        "entry_data": {
+            "manager": mock_delete_manager,
+            "storage": mock_delete_storage,
+        },
+    }
+    await async_setup_services(hass)
+
+    with pytest.raises(
+        ValueError,
+        match=f"Story '{mock_task_entity_for_delete.story_id}' not found",
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_DELETE_TASK,
+            {"task_id": task_id},
+            blocking=True,
+        )
+
+    # Task must still be present in the registry (nothing was deleted)
+    assert hass.data[DOMAIN]["task_entities"][task_id] is mock_task_entity_for_delete
+    mock_delete_manager.async_delete_task.assert_not_called()
+
+
 async def test_delete_task_task_not_found(hass: HomeAssistant):
     """Test delete_task raises TaskNotFoundError when task is not in registry."""
     hass.data[DOMAIN] = {
@@ -1536,6 +1579,22 @@ async def test_clone_story_success(hass: HomeAssistant):
     new_entities = mock_add_entities.call_args[0][0]
     # Should include 1 progress entity + 1 task entity
     assert len(new_entities) == 2
+
+    cloned_story_id = "kitchen_copy"
+
+    # Verify progress_entities registry is populated for the cloned story
+    assert cloned_story_id in hass.data[DOMAIN]["progress_entities"]
+    cloned_progress = hass.data[DOMAIN]["progress_entities"][cloned_story_id]
+    assert cloned_progress.story_id == cloned_story_id
+
+    # Verify task_entities registry is populated for the cloned task
+    cloned_task_id = "kitchen_copy_task_0"
+    assert cloned_task_id in hass.data[DOMAIN]["task_entities"]
+    cloned_task = hass.data[DOMAIN]["task_entities"][cloned_task_id]
+    assert cloned_task.story_id == cloned_story_id
+    assert cloned_task.title == "Paint"
+    # Tasks are reset to todo on clone
+    assert cloned_task.state == "todo"
 
 
 async def test_clone_story_source_not_found(hass: HomeAssistant):

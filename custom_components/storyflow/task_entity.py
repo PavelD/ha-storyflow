@@ -10,6 +10,16 @@ from .const import DOMAIN, TASK_STATES
 _LOGGER = logging.getLogger(__name__)
 
 
+def get_task_unique_id(task_id: str) -> str:
+    """Generate the unique_id for a task entity.
+
+    Centralised so that both the entity and any service-layer lookups
+    always use the same format.  Change this function when the format
+    changes – all callers stay in sync automatically.
+    """
+    return f"{DOMAIN}_{task_id}"
+
+
 class TaskEntity(SensorEntity):
     """Representation of a Task."""
 
@@ -40,7 +50,7 @@ class TaskEntity(SensorEntity):
     @property
     def unique_id(self) -> str:
         """Return unique ID."""
-        return f"{DOMAIN}_{self.task_id}"
+        return get_task_unique_id(self.task_id)
 
     @property
     def name(self) -> str:

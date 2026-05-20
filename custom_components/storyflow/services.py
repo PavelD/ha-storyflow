@@ -9,6 +9,7 @@ import homeassistant.helpers.config_validation as cv
 
 from .const import DOMAIN, TASK_STATES
 from .exceptions import TaskNotFoundError
+from .task_entity import get_task_unique_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,6 +64,37 @@ CLONE_STORY_SCHEMA = vol.Schema(
         vol.Optional("new_story_name"): cv.string,
     }
 )
+
+
+async def _get_manager_and_storage_for_story(
+    hass: HomeAssistant, story_id: str
+) -> tuple:
+    """Find the (manager, storage) pair that owns *story_id*.
+
+    Iterates over every entry registered under ``hass.data[DOMAIN]`` and
+    returns the first pair whose storage reports the story as existing.
+
+    Args:
+        hass: The Home Assistant instance.
+        story_id: The story to look up.
+
+    Returns:
+        A ``(manager, storage_handler)`` tuple.
+
+    Raises:
+        ValueError: If no entry_data can satisfy the story_id.
+    """
+    for entry_data in hass.data[DOMAIN].values():
+        if (
+            isinstance(entry_data, dict)
+            and "manager" in entry_data
+            and "storage" in entry_data
+        ):
+            if await entry_data["storage"].async_story_exists(story_id):
+                return entry_data["manager"], entry_data["storage"]
+
+    _LOGGER.error("No manager found for story '%s'", story_id)
+    raise ValueError(f"Story '{story_id}' not found")
 
 
 async def async_setup_services(hass: HomeAssistant) -> None:
@@ -138,24 +170,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 raise ValueError(f"Story '{story_id}' not found")
 
             try:
-                # Find the manager for this story (search through all entry data)
-                manager = None
-                storage_handler = None
-                for entry_data in hass.data[DOMAIN].values():
-                    if (
-                        isinstance(entry_data, dict)
-                        and "manager" in entry_data
-                        and "storage" in entry_data
-                    ):
-                        # Check if this manager can handle the story_id
-                        if await entry_data["storage"].async_story_exists(story_id):
-                            manager = entry_data["manager"]
-                            storage_handler = entry_data["storage"]
-                            break
-
-                if not manager or not storage_handler:
-                    _LOGGER.error("No manager found for story '%s'", story_id)
-                    raise ValueError(f"Story '{story_id}' not found")
+                # Find the manager and storage for this story
+                manager, storage_handler = await _get_manager_and_storage_for_story(
+                    hass, story_id
+                )
 
                 # Add task via manager (validates and persists to storage)
                 task_data = await manager.async_add_task(
@@ -226,22 +244,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
             try:
                 # Find the manager and storage for this story
-                manager = None
-                storage_handler = None
-                for entry_data in hass.data[DOMAIN].values():
-                    if (
-                        isinstance(entry_data, dict)
-                        and "manager" in entry_data
-                        and "storage" in entry_data
-                    ):
-                        if await entry_data["storage"].async_story_exists(story_id):
-                            manager = entry_data["manager"]
-                            storage_handler = entry_data["storage"]
-                            break
-
-                if not manager or not storage_handler:
-                    _LOGGER.error("No manager found for story '%s'", story_id)
-                    raise ValueError(f"Story '{story_id}' not found")
+                manager, storage_handler = await _get_manager_and_storage_for_story(
+                    hass, story_id
+                )
 
                 # Delete task from storage via manager (validates existence)
                 await manager.async_delete_task(story_id, task_id)
@@ -250,7 +255,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 from homeassistant.helpers import entity_registry as er
 
                 entity_reg = er.async_get(hass)
-                unique_id = f"{DOMAIN}_{task_id}"
+                unique_id = get_task_unique_id(task_id)
                 ha_entity_id = entity_reg.async_get_entity_id(
                     "sensor", DOMAIN, unique_id
                 )
@@ -329,22 +334,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             _LOGGER.debug("Service call: clone_story for %s", story_id)
 
             # Find the manager and storage for this story
-            manager = None
-            storage_handler = None
-            for entry_data in hass.data[DOMAIN].values():
-                if (
-                    isinstance(entry_data, dict)
-                    and "manager" in entry_data
-                    and "storage" in entry_data
-                ):
-                    if await entry_data["storage"].async_story_exists(story_id):
-                        manager = entry_data["manager"]
-                        storage_handler = entry_data["storage"]
-                        break
-
-            if not manager or not storage_handler:
-                _LOGGER.error("No manager found for story '%s'", story_id)
-                raise ValueError(f"Story '{story_id}' not found")
+            manager, storage_handler = await _get_manager_and_storage_for_story(
+                hass, story_id
+            )
 
             # Clone the story (validates source, persists new story to storage)
             result = await manager.async_clone_story(story_id, new_story_name)

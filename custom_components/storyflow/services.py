@@ -71,8 +71,9 @@ async def _get_manager_and_storage_for_story(
 ) -> tuple:
     """Find the (manager, storage) pair that owns *story_id*.
 
-    Iterates over every entry registered under ``hass.data[DOMAIN]`` and
-    returns the first pair whose storage reports the story as existing.
+    Iterates over config-entry mappings registered under
+    ``hass.data[DOMAIN]["entries"]`` and returns the first pair whose
+    storage reports the story as existing.
 
     Args:
         hass: The Home Assistant instance.
@@ -82,19 +83,32 @@ async def _get_manager_and_storage_for_story(
         A ``(manager, storage_handler)`` tuple.
 
     Raises:
-        ValueError: If no entry_data can satisfy the story_id.
+        ValueError: If no entry can satisfy the story_id.
     """
-    for entry_data in hass.data[DOMAIN].values():
-        if (
-            isinstance(entry_data, dict)
-            and "manager" in entry_data
-            and "storage" in entry_data
-        ):
-            if await entry_data["storage"].async_story_exists(story_id):
-                return entry_data["manager"], entry_data["storage"]
+    for entry_data in hass.data[DOMAIN].get("entries", {}).values():
+        if await entry_data["storage"].async_story_exists(story_id):
+            return entry_data["manager"], entry_data["storage"]
 
-    _LOGGER.error("No manager found for story '%s'", story_id)
     raise ValueError(f"Story '{story_id}' not found")
+
+
+async def _refresh_progress_entity(
+    hass: HomeAssistant,
+    story_id: str,
+    storage_handler,
+) -> None:
+    """Reload story tasks and push the update to the progress entity.
+
+    Args:
+        hass: The Home Assistant instance.
+        story_id: The story whose progress entity should be refreshed.
+        storage_handler: Storage handler used to reload the story data.
+    """
+    progress_entity = hass.data[DOMAIN].get("progress_entities", {}).get(story_id)
+    if progress_entity:
+        story_data = await storage_handler.load_story(story_id)
+        progress_entity.tasks = story_data.get("tasks", [])
+        progress_entity.async_write_ha_state()
 
 
 async def async_setup_services(hass: HomeAssistant) -> None:
@@ -210,12 +224,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 hass.data[DOMAIN]["task_entities"][task_id] = task_entity
 
                 # Update progress entity
-                progress_entity = hass.data[DOMAIN]["progress_entities"].get(story_id)
-                if progress_entity:
-                    # Reload tasks to update progress calculation
-                    story_data = await storage_handler.load_story(story_id)
-                    progress_entity.tasks = story_data.get("tasks", [])
-                    progress_entity.async_write_ha_state()
+                await _refresh_progress_entity(hass, story_id, storage_handler)
 
                 _LOGGER.info(
                     "Successfully added task '%s' (ID: %s) to story '%s'",
@@ -269,11 +278,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 hass.data[DOMAIN]["task_entities"].pop(task_id, None)
 
                 # Update progress entity to recalculate stats
-                progress_entity = hass.data[DOMAIN]["progress_entities"].get(story_id)
-                if progress_entity:
-                    story_data = await storage_handler.load_story(story_id)
-                    progress_entity.tasks = story_data.get("tasks", [])
-                    progress_entity.async_write_ha_state()
+                await _refresh_progress_entity(hass, story_id, storage_handler)
 
                 _LOGGER.info(
                     "Successfully deleted task '%s' from story '%s'",
@@ -292,12 +297,6 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             description = call.data.get("description")
 
             _LOGGER.debug("Service call: update_task for %s", task_id)
-
-            # Validate at least one field is provided
-            if title is None and description is None:
-                raise ValueError(
-                    "At least one of 'title' or 'description' must be provided"
-                )
 
             # Find task entity from the registry
             task_entity = hass.data[DOMAIN].get("task_entities", {}).get(task_id)
@@ -344,13 +343,18 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
             _LOGGER.debug("Service call: clone_story for %s", story_id)
 
-            # Find the manager and storage for this story
-            manager, storage_handler = await _get_manager_and_storage_for_story(
-                hass, story_id
-            )
+            try:
+                # Find the manager and storage for this story
+                manager, storage_handler = await _get_manager_and_storage_for_story(
+                    hass, story_id
+                )
 
-            # Clone the story (validates source, persists new story to storage)
-            result = await manager.async_clone_story(story_id, new_story_name)
+                # Clone the story (validates source, persists new story to storage)
+                result = await manager.async_clone_story(story_id, new_story_name)
+            except ValueError as err:
+                _LOGGER.error("Failed to clone story %s: %s", story_id, err)
+                raise
+
             new_story_id = result["story_id"]
             new_story_data = result["story_data"]
 

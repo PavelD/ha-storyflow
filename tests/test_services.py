@@ -464,9 +464,11 @@ async def test_clone_story_valid(hass: HomeAssistant):
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
-        "entry_data": {
-            "manager": mock_manager,
-            "storage": mock_storage,
+        "entries": {
+            "entry_data": {
+                "manager": mock_manager,
+                "storage": mock_storage,
+            },
         },
     }
     await async_setup_services(hass)
@@ -499,9 +501,11 @@ async def test_clone_story_optional_name(hass: HomeAssistant):
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
-        "entry_data": {
-            "manager": mock_manager,
-            "storage": mock_storage,
+        "entries": {
+            "entry_data": {
+                "manager": mock_manager,
+                "storage": mock_storage,
+            },
         },
     }
     await async_setup_services(hass)
@@ -725,9 +729,11 @@ async def test_add_task_success_creates_entity(
         "entity_callbacks": {"kitchen": mock_add_entities},
         "task_entities": {},
         "progress_entities": {"kitchen": mock_progress},
-        "entry_data": {
-            "manager": mock_manager,
-            "storage": mock_add_task_storage,
+        "entries": {
+            "entry_data": {
+                "manager": mock_manager,
+                "storage": mock_add_task_storage,
+            },
         },
     }
     await async_setup_services(hass)
@@ -763,9 +769,11 @@ async def test_add_task_success_updates_progress(
         "entity_callbacks": {"kitchen": MagicMock()},
         "task_entities": {},
         "progress_entities": {"kitchen": mock_progress},
-        "entry_data": {
-            "manager": mock_manager,
-            "storage": mock_add_task_storage,
+        "entries": {
+            "entry_data": {
+                "manager": mock_manager,
+                "storage": mock_add_task_storage,
+            },
         },
     }
     await async_setup_services(hass)
@@ -801,9 +809,11 @@ async def test_add_task_with_all_optional_fields(
         "entity_callbacks": {"kitchen": MagicMock()},
         "task_entities": {},
         "progress_entities": {"kitchen": MagicMock()},
-        "entry_data": {
-            "manager": mock_manager,
-            "storage": mock_add_task_storage,
+        "entries": {
+            "entry_data": {
+                "manager": mock_manager,
+                "storage": mock_add_task_storage,
+            },
         },
     }
     await async_setup_services(hass)
@@ -840,9 +850,11 @@ async def test_add_task_default_state_passed_to_manager(
         "entity_callbacks": {"kitchen": MagicMock()},
         "task_entities": {},
         "progress_entities": {"kitchen": MagicMock()},
-        "entry_data": {
-            "manager": mock_manager,
-            "storage": mock_add_task_storage,
+        "entries": {
+            "entry_data": {
+                "manager": mock_manager,
+                "storage": mock_add_task_storage,
+            },
         },
     }
     await async_setup_services(hass)
@@ -921,9 +933,11 @@ async def test_add_task_manager_raises_value_error(
         "entity_callbacks": {"kitchen": MagicMock()},
         "task_entities": initial_task_entities,
         "progress_entities": {"kitchen": mock_progress},
-        "entry_data": {
-            "manager": mock_manager,
-            "storage": mock_add_task_storage,
+        "entries": {
+            "entry_data": {
+                "manager": mock_manager,
+                "storage": mock_add_task_storage,
+            },
         },
     }
     await async_setup_services(hass)
@@ -998,9 +1012,11 @@ async def test_delete_task_calls_manager(
         "service_ref_count": 0,
         "task_entities": {task_id: mock_task_entity_for_delete},
         "progress_entities": {},
-        "entry_data": {
-            "manager": mock_delete_manager,
-            "storage": mock_delete_storage,
+        "entries": {
+            "entry_data": {
+                "manager": mock_delete_manager,
+                "storage": mock_delete_storage,
+            },
         },
     }
     await async_setup_services(hass)
@@ -1034,9 +1050,11 @@ async def test_delete_task_removes_from_task_entities(
         "service_ref_count": 0,
         "task_entities": task_entities,
         "progress_entities": {},
-        "entry_data": {
-            "manager": mock_delete_manager,
-            "storage": mock_delete_storage,
+        "entries": {
+            "entry_data": {
+                "manager": mock_delete_manager,
+                "storage": mock_delete_storage,
+            },
         },
     }
     await async_setup_services(hass)
@@ -1071,9 +1089,11 @@ async def test_delete_task_removes_entity_from_registry(
         "service_ref_count": 0,
         "task_entities": {task_id: mock_task_entity_for_delete},
         "progress_entities": {},
-        "entry_data": {
-            "manager": mock_delete_manager,
-            "storage": mock_delete_storage,
+        "entries": {
+            "entry_data": {
+                "manager": mock_delete_manager,
+                "storage": mock_delete_storage,
+            },
         },
     }
     await async_setup_services(hass)
@@ -1121,9 +1141,11 @@ async def test_delete_task_updates_progress_entity(
         "service_ref_count": 0,
         "task_entities": {task_id: mock_task_entity_for_delete},
         "progress_entities": {"kitchen": mock_progress},
-        "entry_data": {
-            "manager": mock_delete_manager,
-            "storage": mock_delete_storage,
+        "entries": {
+            "entry_data": {
+                "manager": mock_delete_manager,
+                "storage": mock_delete_storage,
+            },
         },
     }
     await async_setup_services(hass)
@@ -1158,9 +1180,11 @@ async def test_delete_task_no_progress_entity_no_error(
         "service_ref_count": 0,
         "task_entities": {task_id: mock_task_entity_for_delete},
         "progress_entities": {},  # No progress entity for this story
-        "entry_data": {
-            "manager": mock_delete_manager,
-            "storage": mock_delete_storage,
+        "entries": {
+            "entry_data": {
+                "manager": mock_delete_manager,
+                "storage": mock_delete_storage,
+            },
         },
     }
     await async_setup_services(hass)
@@ -1201,9 +1225,11 @@ async def test_delete_task_story_not_found(
         "service_ref_count": 0,
         "task_entities": {task_id: mock_task_entity_for_delete},
         "progress_entities": {},
-        "entry_data": {
-            "manager": mock_delete_manager,
-            "storage": mock_delete_storage,
+        "entries": {
+            "entry_data": {
+                "manager": mock_delete_manager,
+                "storage": mock_delete_storage,
+            },
         },
     }
     await async_setup_services(hass)
@@ -1258,9 +1284,11 @@ async def test_delete_task_manager_failure_propagates(
         "service_ref_count": 0,
         "task_entities": {task_id: mock_task_entity_for_delete},
         "progress_entities": {},
-        "entry_data": {
-            "manager": failing_manager,
-            "storage": mock_delete_storage,
+        "entries": {
+            "entry_data": {
+                "manager": failing_manager,
+                "storage": mock_delete_storage,
+            },
         },
     }
     await async_setup_services(hass)
@@ -1347,7 +1375,12 @@ async def test_update_task_title_only(
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {task_id: mock_task_entity_for_update},
-        "entry_data": {"manager": mock_update_manager, "storage": mock_update_storage},
+        "entries": {
+            "entry_data": {
+                "manager": mock_update_manager,
+                "storage": mock_update_storage,
+            }
+        },
     }
     await async_setup_services(hass)
 
@@ -1378,7 +1411,12 @@ async def test_update_task_description_only(
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {task_id: mock_task_entity_for_update},
-        "entry_data": {"manager": mock_update_manager, "storage": mock_update_storage},
+        "entries": {
+            "entry_data": {
+                "manager": mock_update_manager,
+                "storage": mock_update_storage,
+            }
+        },
     }
     await async_setup_services(hass)
 
@@ -1409,7 +1447,12 @@ async def test_update_task_both_fields(
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {task_id: mock_task_entity_for_update},
-        "entry_data": {"manager": mock_update_manager, "storage": mock_update_storage},
+        "entries": {
+            "entry_data": {
+                "manager": mock_update_manager,
+                "storage": mock_update_storage,
+            }
+        },
     }
     await async_setup_services(hass)
 
@@ -1428,23 +1471,38 @@ async def test_update_task_both_fields(
     )
 
 
-async def test_update_task_no_fields_raises(hass: HomeAssistant):
-    """Test update_task raises ValueError when neither title nor description is provided."""
-    task_id = "kitchen_task_0"
+async def test_update_task_no_fields_raises(
+    hass: HomeAssistant,
+    mock_task_entity_for_update,
+    mock_update_manager,
+    mock_update_storage,
+):
+    """Test update_task raises ValueError when neither title nor description is provided.
 
-    mock_entity = MagicMock()
-    mock_entity.task_id = task_id
-    mock_entity.story_id = "kitchen"
-    mock_entity.async_update_attributes = AsyncMock()
+    Validation is delegated entirely to StoryManager.async_update_task_details, so this
+    test wires the mock manager to raise the expected error and confirms the service
+    propagates it without mutating entity state.
+    """
+    task_id = "kitchen_task_0"
+    mock_update_manager.async_update_task_details.side_effect = ValueError(
+        "At least one field (title, description) must be provided to update"
+    )
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
-        "task_entities": {task_id: mock_entity},
+        "task_entities": {task_id: mock_task_entity_for_update},
+        "entries": {
+            "entry_data": {
+                "manager": mock_update_manager,
+                "storage": mock_update_storage,
+            }
+        },
     }
     await async_setup_services(hass)
 
     with pytest.raises(
-        ValueError, match="At least one of 'title' or 'description' must be provided"
+        ValueError,
+        match="At least one field",
     ):
         await hass.services.async_call(
             DOMAIN,
@@ -1454,7 +1512,51 @@ async def test_update_task_no_fields_raises(hass: HomeAssistant):
         )
 
     # Entity should not have been updated
-    mock_entity.async_update_attributes.assert_not_called()
+    mock_task_entity_for_update.async_update_attributes.assert_not_called()
+
+
+async def test_update_task_story_not_found(
+    hass: HomeAssistant,
+    mock_task_entity_for_update,
+    mock_update_manager,
+    mock_update_storage,
+) -> None:
+    """Test update_task service fails when story cannot be resolved.
+
+    The task entity exists in the registry but async_story_exists returns False for
+    every entry, so _get_manager_and_storage_for_story raises ValueError.
+    """
+    task_id = "kitchen_task_0"
+
+    # Make storage unable to find the story
+    mock_update_storage.async_story_exists = AsyncMock(return_value=False)
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {task_id: mock_task_entity_for_update},
+        "entries": {
+            "entry_data": {
+                "manager": mock_update_manager,
+                "storage": mock_update_storage,
+            }
+        },
+    }
+    await async_setup_services(hass)
+
+    with pytest.raises(
+        ValueError,
+        match="Story 'kitchen' not found",
+    ):
+        await hass.services.async_call(
+            DOMAIN,
+            SERVICE_UPDATE_TASK,
+            {"task_id": task_id, "title": "Updated Title"},
+            blocking=True,
+        )
+
+    # Ensure no task updates were attempted
+    mock_update_manager.async_update_task_details.assert_not_called()
+    mock_task_entity_for_update.async_update_attributes.assert_not_called()
 
 
 async def test_update_task_task_not_found(hass: HomeAssistant):
@@ -1489,7 +1591,12 @@ async def test_update_task_storage_failure_propagates(
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {task_id: mock_task_entity_for_update},
-        "entry_data": {"manager": mock_update_manager, "storage": mock_update_storage},
+        "entries": {
+            "entry_data": {
+                "manager": mock_update_manager,
+                "storage": mock_update_storage,
+            }
+        },
     }
     await async_setup_services(hass)
 
@@ -1531,7 +1638,12 @@ async def test_update_task_entity_state_reflects_update(
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {task_id: mock_task_entity_for_update},
-        "entry_data": {"manager": mock_update_manager, "storage": mock_update_storage},
+        "entries": {
+            "entry_data": {
+                "manager": mock_update_manager,
+                "storage": mock_update_storage,
+            }
+        },
     }
     await async_setup_services(hass)
 
@@ -1615,9 +1727,11 @@ async def test_clone_story_success(hass: HomeAssistant):
         "task_entities": {},
         "entity_callbacks": {story_id: mock_add_entities},
         "progress_entities": {},
-        "entry_kitchen": {
-            "manager": mock_manager,
-            "storage": mock_storage,
+        "entries": {
+            "entry_kitchen": {
+                "manager": mock_manager,
+                "storage": mock_storage,
+            },
         },
     }
 
@@ -1666,9 +1780,11 @@ async def test_clone_story_source_not_found(hass: HomeAssistant):
         "task_entities": {},
         "entity_callbacks": {},
         "progress_entities": {},
-        "entry_data": {
-            "manager": mock_manager,
-            "storage": mock_storage,
+        "entries": {
+            "entry_data": {
+                "manager": mock_manager,
+                "storage": mock_storage,
+            },
         },
     }
 
@@ -1699,9 +1815,11 @@ async def test_clone_story_manager_raises_propagates(hass: HomeAssistant):
         "task_entities": {},
         "entity_callbacks": {story_id: mock_add_entities},
         "progress_entities": {},
-        "entry_kitchen": {
-            "manager": mock_manager,
-            "storage": mock_storage,
+        "entries": {
+            "entry_kitchen": {
+                "manager": mock_manager,
+                "storage": mock_storage,
+            },
         },
     }
 
@@ -1738,9 +1856,11 @@ async def test_clone_story_no_entity_callback_does_not_raise(hass: HomeAssistant
         "task_entities": {},
         "entity_callbacks": {},  # No callbacks at all
         "progress_entities": {},
-        "entry_kitchen": {
-            "manager": mock_manager,
-            "storage": mock_storage,
+        "entries": {
+            "entry_kitchen": {
+                "manager": mock_manager,
+                "storage": mock_storage,
+            },
         },
     }
 
@@ -1781,9 +1901,11 @@ async def test_clone_story_registers_callback_for_new_story(hass: HomeAssistant)
         "task_entities": {},
         "entity_callbacks": {story_id: mock_add_entities},
         "progress_entities": {},
-        "entry_kitchen": {
-            "manager": mock_manager,
-            "storage": mock_storage,
+        "entries": {
+            "entry_kitchen": {
+                "manager": mock_manager,
+                "storage": mock_storage,
+            },
         },
     }
 

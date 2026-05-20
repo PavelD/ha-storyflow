@@ -776,7 +776,7 @@ async def test_clone_story_success_default_name(story_manager, mock_storage):
     result = await story_manager.async_clone_story("kitchen")
 
     assert result["story_data"]["title"] == "Kitchen (Copy)"
-    assert result["story_id"] == "kitchen_(copy)"
+    assert result["story_id"] == "kitchen_copy"
 
 
 @pytest.mark.asyncio

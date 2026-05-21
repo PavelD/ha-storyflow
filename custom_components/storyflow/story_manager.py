@@ -1,3 +1,5 @@
+import re
+
 from .const import TASK_STATES
 
 
@@ -14,9 +16,24 @@ class StoryManager:
         self.storage = storage_handler
         self.hass = hass
 
+    def _generate_story_id(self, title: str) -> str:
+        """Generate a normalized, stable story_id from a human-readable title.
+
+        - Lowercase
+        - Collapse whitespace
+        - Replace non-alphanumeric characters with underscores
+        - Collapse repeated underscores
+        - Strip leading/trailing underscores
+        """
+        slug = title.strip().lower()
+        slug = re.sub(r"\s+", " ", slug)
+        slug = re.sub(r"[^\w]+", "_", slug)
+        slug = re.sub(r"_+", "_", slug).strip("_")
+        return slug or "story"
+
     async def create_story(self, title, description, tasks):
         """Create a new story and save it to storage."""
-        story_id = title.lower().replace(" ", "_")
+        story_id = self._generate_story_id(title)
         data = {
             "title": title,
             "description": description,
@@ -220,6 +237,120 @@ class StoryManager:
 
         return task_data
 
-    def clone_story(self, story_id, new_title):
-        """Clone a story: tasks reset to todo + assigned_to=None."""
-        raise NotImplementedError("clone_story is not implemented yet.")
+    async def async_delete_task(self, story_id: str, task_id: str) -> None:
+        """Delete a task from a story.
+
+        Args:
+            story_id: The story identifier
+            task_id: The task identifier
+
+        Raises:
+            ValueError: If story or task not found
+        """
+        # Validate task exists before deletion
+        await self.async_validate_task_exists(story_id, task_id)
+
+        # Delete via storage
+        await self.storage.async_delete_task(story_id, task_id)
+
+    async def async_update_task_details(
+        self,
+        story_id: str,
+        task_id: str,
+        title: str | None = None,
+        description: str | None = None,
+    ) -> None:
+        """Update the title and/or description of a task.
+
+        Args:
+            story_id: The story identifier
+            task_id: The task identifier
+            title: New task title (optional)
+            description: New task description (optional)
+
+        Raises:
+            ValueError: If story/task not found or no fields provided
+        """
+        # Validate at least one field is provided
+        updates = {}
+        if title is not None:
+            updates["title"] = title
+        if description is not None:
+            updates["description"] = description
+
+        if not updates:
+            raise ValueError(
+                "At least one field (title, description) must be provided to update"
+            )
+
+        # Validate task exists
+        await self.async_validate_task_exists(story_id, task_id)
+
+        # Update via storage
+        await self.storage.async_update_task(story_id, task_id, updates)
+
+    async def async_clone_story(
+        self,
+        story_id: str,
+        new_story_name: str | None = None,
+    ) -> dict:
+        """Clone a story, resetting all tasks to todo and clearing assignments.
+
+        Args:
+            story_id: The story identifier to clone
+            new_story_name: Name for the cloned story. Defaults to
+                            "{original title} (Copy)" if not provided.
+
+        Returns:
+            Dictionary with ``story_id`` and ``story_data`` keys for the new story.
+
+        Raises:
+            ValueError: If source story does not exist or new story_id already exists
+        """
+        # Validate source story exists and load it
+        await self.async_validate_story_exists(story_id)
+        source_data = await self.storage.load_story(story_id)
+
+        # Determine the new story title and id
+        if new_story_name:
+            new_title = new_story_name
+        else:
+            source_title = source_data.get("title", story_id)
+            new_title = f"{source_title} (Copy)"
+
+        new_story_id = self._generate_story_id(new_title)
+
+        # Ensure the new story_id does not clash with an existing one
+        if await self.storage.async_story_exists(new_story_id):
+            raise ValueError(
+                f"A story with ID '{new_story_id}' already exists. "
+                "Provide a unique new_story_name."
+            )
+
+        # Deep-copy tasks: reset state → todo, clear assignment, renumber IDs
+        cloned_tasks = []
+        for order, original_task in enumerate(source_data.get("tasks", [])):
+            cloned_task = {
+                "id": f"{new_story_id}_task_{order}",
+                "title": original_task.get("title", ""),
+                "description": original_task.get("description", ""),
+                "assigned_to": None,
+                "state": "todo",
+                "order": order,
+            }
+            cloned_tasks.append(cloned_task)
+
+        # Build the new story data
+        new_story_data = {
+            "title": new_title,
+            "description": source_data.get("description", ""),
+            "tasks": cloned_tasks,
+        }
+
+        # Persist the cloned story
+        await self.storage.save_story(new_story_id, new_story_data)
+
+        return {
+            "story_id": new_story_id,
+            "story_data": new_story_data,
+        }

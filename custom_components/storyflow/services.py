@@ -6,15 +6,20 @@ import voluptuous as vol
 
 from homeassistant.core import HomeAssistant, ServiceCall
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN, TASK_STATES
 from .exceptions import TaskNotFoundError
+from .story_progress_entity import StoryProgressEntity
+from .task_entity import TaskEntity, get_task_unique_id
 
 _LOGGER = logging.getLogger(__name__)
 
 SERVICE_SET_STATE = "set_task_state"
 SERVICE_ASSIGN = "assign_task"
 SERVICE_ADD_TASK = "add_task"
+SERVICE_DELETE_TASK = "delete_task"
+SERVICE_UPDATE_TASK = "update_task"
 SERVICE_CLONE_STORY = "clone_story"
 
 SET_STATE_SCHEMA = vol.Schema(
@@ -41,12 +46,71 @@ ADD_TASK_SCHEMA = vol.Schema(
     }
 )
 
+DELETE_TASK_SCHEMA = vol.Schema(
+    {
+        vol.Required("task_id"): cv.string,
+    }
+)
+
+UPDATE_TASK_SCHEMA = vol.Schema(
+    {
+        vol.Required("task_id"): cv.string,
+        vol.Optional("title"): cv.string,
+        vol.Optional("description"): cv.string,
+    }
+)
+
 CLONE_STORY_SCHEMA = vol.Schema(
     {
         vol.Required("story_id"): cv.string,
         vol.Optional("new_story_name"): cv.string,
     }
 )
+
+
+async def _get_manager_and_storage_for_story(
+    hass: HomeAssistant, story_id: str
+) -> tuple:
+    """Find the (manager, storage) pair that owns *story_id*.
+
+    Iterates over config-entry mappings registered under
+    ``hass.data[DOMAIN]["entries"]`` and returns the first pair whose
+    storage reports the story as existing.
+
+    Args:
+        hass: The Home Assistant instance.
+        story_id: The story to look up.
+
+    Returns:
+        A ``(manager, storage_handler)`` tuple.
+
+    Raises:
+        ValueError: If no entry can satisfy the story_id.
+    """
+    for entry_data in hass.data[DOMAIN].get("entries", {}).values():
+        if await entry_data["storage"].async_story_exists(story_id):
+            return entry_data["manager"], entry_data["storage"]
+
+    raise ValueError(f"Story '{story_id}' not found")
+
+
+async def _refresh_progress_entity(
+    hass: HomeAssistant,
+    story_id: str,
+    storage_handler,
+) -> None:
+    """Reload story tasks and push the update to the progress entity.
+
+    Args:
+        hass: The Home Assistant instance.
+        story_id: The story whose progress entity should be refreshed.
+        storage_handler: Storage handler used to reload the story data.
+    """
+    progress_entity = hass.data[DOMAIN].get("progress_entities", {}).get(story_id)
+    if progress_entity:
+        story_data = await storage_handler.load_story(story_id)
+        progress_entity.tasks = story_data.get("tasks", [])
+        progress_entity.async_write_ha_state()
 
 
 async def async_setup_services(hass: HomeAssistant) -> None:
@@ -122,24 +186,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 raise ValueError(f"Story '{story_id}' not found")
 
             try:
-                # Find the manager for this story (search through all entry data)
-                manager = None
-                storage_handler = None
-                for entry_data in hass.data[DOMAIN].values():
-                    if (
-                        isinstance(entry_data, dict)
-                        and "manager" in entry_data
-                        and "storage" in entry_data
-                    ):
-                        # Check if this manager can handle the story_id
-                        if await entry_data["storage"].async_story_exists(story_id):
-                            manager = entry_data["manager"]
-                            storage_handler = entry_data["storage"]
-                            break
-
-                if not manager or not storage_handler:
-                    _LOGGER.error("No manager found for story '%s'", story_id)
-                    raise ValueError(f"Story '{story_id}' not found")
+                # Find the manager and storage for this story
+                manager, storage_handler = await _get_manager_and_storage_for_story(
+                    hass, story_id
+                )
 
                 # Add task via manager (validates and persists to storage)
                 task_data = await manager.async_add_task(
@@ -152,9 +202,6 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
                 task_id = task_data["id"]
                 _LOGGER.debug("Created task data with ID: %s", task_id)
-
-                # Import TaskEntity here to avoid circular imports
-                from .task_entity import TaskEntity
 
                 # Create new TaskEntity
                 task_entity = TaskEntity(
@@ -176,12 +223,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 hass.data[DOMAIN]["task_entities"][task_id] = task_entity
 
                 # Update progress entity
-                progress_entity = hass.data[DOMAIN]["progress_entities"].get(story_id)
-                if progress_entity:
-                    # Reload tasks to update progress calculation
-                    story_data = await storage_handler.load_story(story_id)
-                    progress_entity.tasks = story_data.get("tasks", [])
-                    progress_entity.async_write_ha_state()
+                await _refresh_progress_entity(hass, story_id, storage_handler)
 
                 _LOGGER.info(
                     "Successfully added task '%s' (ID: %s) to story '%s'",
@@ -194,13 +236,177 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 _LOGGER.error("Failed to add task to story %s: %s", story_id, err)
                 raise
 
-        async def clone_story_service(call: ServiceCall) -> None:
-            """Clone a story."""
-            story_id = call.data["story_id"]
-            new_title = call.data.get("new_story_name")
+        async def delete_task_service(call: ServiceCall) -> None:
+            """Delete a task from a story."""
+            task_id = call.data["task_id"]
 
-            # TODO: Implement - duplicate story with reset tasks
-            _LOGGER.info(f"Cloning story {story_id} to {new_title}")
+            _LOGGER.debug("Service call: delete_task for %s", task_id)
+
+            # Find task entity from the registry
+            task_entity = hass.data[DOMAIN].get("task_entities", {}).get(task_id)
+            if task_entity is None:
+                _LOGGER.error("Task '%s' not found", task_id)
+                raise TaskNotFoundError(task_id)
+
+            story_id = task_entity.story_id
+
+            try:
+                # Find the manager and storage for this story
+                manager, storage_handler = await _get_manager_and_storage_for_story(
+                    hass, story_id
+                )
+
+                # Delete task from storage via manager (validates existence)
+                await manager.async_delete_task(story_id, task_id)
+
+                # Remove entity from Home Assistant entity registry
+                entity_reg = er.async_get(hass)
+                unique_id = get_task_unique_id(task_id)
+                ha_entity_id = entity_reg.async_get_entity_id(
+                    "sensor", DOMAIN, unique_id
+                )
+                if ha_entity_id:
+                    entity_reg.async_remove(ha_entity_id)
+                    _LOGGER.debug(
+                        "Removed entity %s from entity registry", ha_entity_id
+                    )
+
+                # Remove from task_entities lookup registry
+                hass.data[DOMAIN]["task_entities"].pop(task_id, None)
+
+                # Update progress entity to recalculate stats
+                await _refresh_progress_entity(hass, story_id, storage_handler)
+
+                _LOGGER.info(
+                    "Successfully deleted task '%s' from story '%s'",
+                    task_id,
+                    story_id,
+                )
+
+            except ValueError as err:
+                _LOGGER.error("Failed to delete task %s: %s", task_id, err)
+                raise
+
+        async def update_task_service(call: ServiceCall) -> None:
+            """Update a task's title and/or description."""
+            task_id = call.data["task_id"]
+            title = call.data.get("title")
+            description = call.data.get("description")
+
+            _LOGGER.debug("Service call: update_task for %s", task_id)
+
+            # Find task entity from the registry
+            task_entity = hass.data[DOMAIN].get("task_entities", {}).get(task_id)
+            if task_entity is None:
+                _LOGGER.error("Task '%s' not found", task_id)
+                raise TaskNotFoundError(task_id)
+
+            story_id = task_entity.story_id
+
+            try:
+                # Find the manager for this story (centralised validation + persistence)
+                manager, _ = await _get_manager_and_storage_for_story(hass, story_id)
+
+                # Delegate validation and persistence to StoryManager
+                await manager.async_update_task_details(
+                    story_id=story_id,
+                    task_id=task_id,
+                    title=title,
+                    description=description,
+                )
+
+                # Sync HA entity state (title/description display only, no re-validation)
+                updates = {}
+                if title is not None:
+                    updates["title"] = title
+                if description is not None:
+                    updates["description"] = description
+                await task_entity.async_update_attributes(**updates)
+
+                _LOGGER.info(
+                    "Successfully updated task '%s' with fields: %s",
+                    task_id,
+                    list(updates.keys()),
+                )
+
+            except ValueError as err:
+                _LOGGER.error("Failed to update task %s: %s", task_id, err)
+                raise
+
+        async def clone_story_service(call: ServiceCall) -> None:
+            """Clone a story with all tasks reset to todo."""
+            story_id = call.data["story_id"]
+            new_story_name = call.data.get("new_story_name")
+
+            _LOGGER.debug("Service call: clone_story for %s", story_id)
+
+            try:
+                # Find the manager and storage for this story
+                manager, storage_handler = await _get_manager_and_storage_for_story(
+                    hass, story_id
+                )
+
+                # Clone the story (validates source, persists new story to storage)
+                result = await manager.async_clone_story(story_id, new_story_name)
+            except ValueError as err:
+                _LOGGER.error("Failed to clone story %s: %s", story_id, err)
+                raise
+
+            new_story_id = result["story_id"]
+            new_story_data = result["story_data"]
+
+            # Re-use the source story's entity callback for the clone.
+            # This avoids picking an arbitrary callback when multiple config
+            # entries / platforms are registered and guarantees the clone is
+            # added to the same platform as the original story.
+            entity_callbacks = hass.data[DOMAIN].get("entity_callbacks", {})
+            async_add_entities = entity_callbacks.get(story_id)
+
+            if async_add_entities is None:
+                _LOGGER.warning(
+                    "No entity callback is currently registered for story '%s'; "
+                    "entities for cloned story '%s' will only be added once the "
+                    "corresponding platform is loaded or reloaded",
+                    story_id,
+                    new_story_id,
+                )
+            else:
+                new_entities = []
+
+                # Progress entity for the cloned story
+                progress_entity = StoryProgressEntity(
+                    story_id=new_story_id,
+                    tasks=new_story_data.get("tasks", []),
+                )
+                hass.data[DOMAIN]["progress_entities"][new_story_id] = progress_entity
+                new_entities.append(progress_entity)
+
+                # Task entities for the cloned story
+                for task_data in new_story_data.get("tasks", []):
+                    task_entity = TaskEntity(
+                        story_id=new_story_id,
+                        task_id=task_data["id"],
+                        title=task_data["title"],
+                        description=task_data.get("description", ""),
+                        storage_handler=storage_handler,
+                        assigned_to=task_data.get("assigned_to"),
+                        state=task_data.get("state", "todo"),
+                        order=task_data.get("order", 0),
+                    )
+                    new_entities.append(task_entity)
+                    hass.data[DOMAIN]["task_entities"][task_data["id"]] = task_entity
+
+                # Register the callback for the new story so add_task works on it too
+                hass.data[DOMAIN]["entity_callbacks"][new_story_id] = async_add_entities
+
+                # Add all new entities to Home Assistant
+                async_add_entities(new_entities)
+
+            _LOGGER.info(
+                "Successfully cloned story '%s' → '%s'",
+                story_id,
+                new_story_id,
+            )
 
         # Register services
         hass.services.async_register(
@@ -222,6 +428,20 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             SERVICE_ADD_TASK,
             add_task_service,
             schema=ADD_TASK_SCHEMA,
+        )
+
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_DELETE_TASK,
+            delete_task_service,
+            schema=DELETE_TASK_SCHEMA,
+        )
+
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_UPDATE_TASK,
+            update_task_service,
+            schema=UPDATE_TASK_SCHEMA,
         )
 
         hass.services.async_register(
@@ -248,4 +468,6 @@ async def async_unload_services(hass: HomeAssistant) -> None:
         hass.services.async_remove(DOMAIN, SERVICE_SET_STATE)
         hass.services.async_remove(DOMAIN, SERVICE_ASSIGN)
         hass.services.async_remove(DOMAIN, SERVICE_ADD_TASK)
+        hass.services.async_remove(DOMAIN, SERVICE_DELETE_TASK)
+        hass.services.async_remove(DOMAIN, SERVICE_UPDATE_TASK)
         hass.services.async_remove(DOMAIN, SERVICE_CLONE_STORY)

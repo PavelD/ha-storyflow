@@ -38,6 +38,7 @@ async def async_setup(hass: HomeAssistant, config: dict):
         {
             "service_ref_count": 0,
             "task_entities": {},  # {task_id: TaskEntity}
+            "entries": {},  # {entry_id: {"manager": ..., "storage": ...}}
         },
     )
     return True
@@ -55,8 +56,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Save the story to persistent storage
     await manager.create_story(story_name, story_desc, tasks)
 
-    # Store manager and storage in hass.data
-    hass.data[DOMAIN][entry.entry_id] = {
+    # Store manager and storage in hass.data under the dedicated "entries" key
+    hass.data[DOMAIN].setdefault("entries", {})
+    hass.data[DOMAIN]["entries"][entry.entry_id] = {
         "manager": manager,
         "storage": storage,
     }
@@ -92,6 +94,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if unload_ok:
         # Remove data
-        hass.data[DOMAIN].pop(entry.entry_id)
+        hass.data[DOMAIN].get("entries", {}).pop(entry.entry_id, None)
 
     return unload_ok

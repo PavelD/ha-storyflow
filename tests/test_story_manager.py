@@ -535,3 +535,489 @@ async def test_add_task_persists_to_storage(story_manager, mock_storage):
     task_data = call_args[0][1]
     assert task_data["id"] == "mystory_task_0"
     assert task_data["title"] == "New Task"
+
+
+# =============================================================================
+# Tests for async_delete_task
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_delete_task_success(story_manager, mock_storage):
+    """Test successfully deleting an existing task."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = {"id": "task1", "title": "Test"}
+    mock_storage.async_delete_task.return_value = None
+
+    await story_manager.async_delete_task("story1", "task1")
+
+    mock_storage.async_delete_task.assert_called_once_with("story1", "task1")
+
+
+@pytest.mark.asyncio
+async def test_delete_task_story_not_found(story_manager, mock_storage):
+    """Test deleting a task from a non-existent story raises ValueError."""
+    mock_storage.async_story_exists.return_value = False
+
+    with pytest.raises(ValueError, match="Story 'story1' not found"):
+        await story_manager.async_delete_task("story1", "task1")
+
+    mock_storage.async_delete_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_task_task_not_found(story_manager, mock_storage):
+    """Test deleting a non-existent task raises ValueError."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = None
+
+    with pytest.raises(ValueError, match="Task 'task1' not found in story 'story1'"):
+        await story_manager.async_delete_task("story1", "task1")
+
+    mock_storage.async_delete_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_task_validates_before_deleting(story_manager, mock_storage):
+    """Test that story and task are validated before deletion is called."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = {"id": "task1", "title": "Test"}
+    mock_storage.async_delete_task.return_value = None
+
+    await story_manager.async_delete_task("story1", "task1")
+
+    # Both story and task must have been validated before deletion
+    mock_storage.async_story_exists.assert_called_once_with("story1")
+    mock_storage.async_get_task.assert_called_once_with("story1", "task1")
+    mock_storage.async_delete_task.assert_called_once_with("story1", "task1")
+
+
+@pytest.mark.asyncio
+async def test_delete_task_storage_propagates_error(story_manager, mock_storage):
+    """Test that a storage error during delete propagates to the caller."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = {"id": "task1", "title": "Test"}
+    mock_storage.async_delete_task.side_effect = ValueError("Storage error")
+
+    with pytest.raises(ValueError, match="Storage error"):
+        await story_manager.async_delete_task("story1", "task1")
+
+
+# =============================================================================
+# Tests for async_update_task_details
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_update_task_details_title_only(story_manager, mock_storage):
+    """Test updating only the title of a task."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = {"id": "task1", "title": "Old Title"}
+    mock_storage.async_update_task.return_value = None
+
+    await story_manager.async_update_task_details("story1", "task1", title="New Title")
+
+    mock_storage.async_update_task.assert_called_once_with(
+        "story1", "task1", {"title": "New Title"}
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_task_details_description_only(story_manager, mock_storage):
+    """Test updating only the description of a task."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = {
+        "id": "task1",
+        "description": "Old desc",
+    }
+    mock_storage.async_update_task.return_value = None
+
+    await story_manager.async_update_task_details(
+        "story1", "task1", description="New description"
+    )
+
+    mock_storage.async_update_task.assert_called_once_with(
+        "story1", "task1", {"description": "New description"}
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_task_details_both_fields(story_manager, mock_storage):
+    """Test updating both title and description of a task."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = {"id": "task1", "title": "Old"}
+    mock_storage.async_update_task.return_value = None
+
+    await story_manager.async_update_task_details(
+        "story1", "task1", title="New Title", description="New Desc"
+    )
+
+    mock_storage.async_update_task.assert_called_once_with(
+        "story1", "task1", {"title": "New Title", "description": "New Desc"}
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_task_details_no_fields_raises(story_manager, mock_storage):
+    """Test that providing no fields raises ValueError before any storage access."""
+    with pytest.raises(ValueError, match="At least one field.*must be provided"):
+        await story_manager.async_update_task_details("story1", "task1")
+
+    # No storage calls should happen when no fields are provided
+    mock_storage.async_story_exists.assert_not_called()
+    mock_storage.async_update_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_task_details_story_not_found(story_manager, mock_storage):
+    """Test updating a task in a non-existent story raises ValueError."""
+    mock_storage.async_story_exists.return_value = False
+
+    with pytest.raises(ValueError, match="Story 'story1' not found"):
+        await story_manager.async_update_task_details(
+            "story1", "task1", title="New Title"
+        )
+
+    mock_storage.async_update_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_task_details_task_not_found(story_manager, mock_storage):
+    """Test updating a non-existent task raises ValueError."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = None
+
+    with pytest.raises(ValueError, match="Task 'task1' not found"):
+        await story_manager.async_update_task_details(
+            "story1", "task1", title="New Title"
+        )
+
+    mock_storage.async_update_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_task_details_validates_existence_before_update(
+    story_manager, mock_storage
+):
+    """Test that task existence is validated before the storage update call."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = {"id": "task1", "title": "Old"}
+    mock_storage.async_update_task.return_value = None
+
+    await story_manager.async_update_task_details("story1", "task1", title="New Title")
+
+    # Validation calls must precede the update call
+    mock_storage.async_story_exists.assert_called_once_with("story1")
+    mock_storage.async_get_task.assert_called_once_with("story1", "task1")
+    mock_storage.async_update_task.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_update_task_details_storage_error_propagates(
+    story_manager, mock_storage
+):
+    """Test that a storage error during update propagates to the caller."""
+    mock_storage.async_story_exists.return_value = True
+    mock_storage.async_get_task.return_value = {"id": "task1", "title": "Old"}
+    mock_storage.async_update_task.side_effect = ValueError("Storage error")
+
+    with pytest.raises(ValueError, match="Storage error"):
+        await story_manager.async_update_task_details(
+            "story1", "task1", title="New Title"
+        )
+
+
+# =============================================================================
+# Tests for async_clone_story
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_clone_story_success_with_custom_name(story_manager, mock_storage):
+    """Test cloning a story with a custom name."""
+    mock_storage.async_story_exists.side_effect = [
+        True,  # source story exists
+        False,  # new story does NOT exist yet
+    ]
+    mock_storage.load_story.return_value = {
+        "title": "Kitchen",
+        "description": "Renovation project",
+        "tasks": [
+            {
+                "id": "kitchen_task_0",
+                "title": "Paint",
+                "description": "",
+                "assigned_to": "person.john",
+                "state": "done",
+                "order": 0,
+            },
+        ],
+    }
+    mock_storage.save_story.return_value = None
+
+    result = await story_manager.async_clone_story("kitchen", "Kitchen Round 2")
+
+    assert result["story_id"] == "kitchen_round_2"
+    assert result["story_data"]["title"] == "Kitchen Round 2"
+    mock_storage.save_story.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_clone_story_success_default_name(story_manager, mock_storage):
+    """Test cloning uses '{original title} (Copy)' when no name is given."""
+    mock_storage.async_story_exists.side_effect = [True, False]
+    mock_storage.load_story.return_value = {
+        "title": "Kitchen",
+        "description": "",
+        "tasks": [],
+    }
+    mock_storage.save_story.return_value = None
+
+    result = await story_manager.async_clone_story("kitchen")
+
+    assert result["story_data"]["title"] == "Kitchen (Copy)"
+    assert result["story_id"] == "kitchen_copy"
+
+
+@pytest.mark.asyncio
+async def test_clone_story_resets_tasks_to_todo(story_manager, mock_storage):
+    """Test that all cloned tasks are reset to 'todo' state."""
+    mock_storage.async_story_exists.side_effect = [True, False]
+    mock_storage.load_story.return_value = {
+        "title": "Kitchen",
+        "description": "",
+        "tasks": [
+            {
+                "id": "kitchen_task_0",
+                "title": "Paint",
+                "description": "",
+                "assigned_to": None,
+                "state": "done",
+                "order": 0,
+            },
+            {
+                "id": "kitchen_task_1",
+                "title": "Fix",
+                "description": "",
+                "assigned_to": None,
+                "state": "progress",
+                "order": 1,
+            },
+            {
+                "id": "kitchen_task_2",
+                "title": "Clean",
+                "description": "",
+                "assigned_to": None,
+                "state": "rejected",
+                "order": 2,
+            },
+        ],
+    }
+    mock_storage.save_story.return_value = None
+
+    result = await story_manager.async_clone_story("kitchen", "Kitchen Copy")
+
+    for task in result["story_data"]["tasks"]:
+        assert task["state"] == "todo", f"Task '{task['title']}' was not reset to todo"
+
+
+@pytest.mark.asyncio
+async def test_clone_story_clears_assignments(story_manager, mock_storage):
+    """Test that all cloned tasks have assigned_to cleared."""
+    mock_storage.async_story_exists.side_effect = [True, False]
+    mock_storage.load_story.return_value = {
+        "title": "Kitchen",
+        "description": "",
+        "tasks": [
+            {
+                "id": "kitchen_task_0",
+                "title": "Paint",
+                "description": "",
+                "assigned_to": "person.john",
+                "state": "done",
+                "order": 0,
+            },
+            {
+                "id": "kitchen_task_1",
+                "title": "Fix",
+                "description": "",
+                "assigned_to": "person.jane",
+                "state": "todo",
+                "order": 1,
+            },
+        ],
+    }
+    mock_storage.save_story.return_value = None
+
+    result = await story_manager.async_clone_story("kitchen", "Kitchen Copy")
+
+    for task in result["story_data"]["tasks"]:
+        assert task["assigned_to"] is None
+
+
+@pytest.mark.asyncio
+async def test_clone_story_renumbers_task_ids(story_manager, mock_storage):
+    """Test that cloned task IDs use the new story_id as prefix."""
+    mock_storage.async_story_exists.side_effect = [True, False]
+    mock_storage.load_story.return_value = {
+        "title": "Kitchen",
+        "description": "",
+        "tasks": [
+            {
+                "id": "kitchen_task_0",
+                "title": "Task A",
+                "description": "",
+                "assigned_to": None,
+                "state": "done",
+                "order": 0,
+            },
+            {
+                "id": "kitchen_task_1",
+                "title": "Task B",
+                "description": "",
+                "assigned_to": None,
+                "state": "done",
+                "order": 1,
+            },
+        ],
+    }
+    mock_storage.save_story.return_value = None
+
+    result = await story_manager.async_clone_story("kitchen", "Kitchen Copy")
+
+    task_ids = [t["id"] for t in result["story_data"]["tasks"]]
+    assert task_ids == ["kitchen_copy_task_0", "kitchen_copy_task_1"]
+
+
+@pytest.mark.asyncio
+async def test_clone_story_source_not_found(story_manager, mock_storage):
+    """Test that cloning a non-existent story raises ValueError."""
+    mock_storage.async_story_exists.return_value = False
+
+    with pytest.raises(ValueError, match="Story 'nonexistent' not found"):
+        await story_manager.async_clone_story("nonexistent")
+
+    mock_storage.save_story.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_clone_story_target_already_exists(story_manager, mock_storage):
+    """Test that cloning to an existing story_id raises ValueError."""
+    mock_storage.async_story_exists.side_effect = [
+        True,  # source story exists
+        True,  # new story ALREADY exists → conflict
+    ]
+    mock_storage.load_story.return_value = {
+        "title": "Kitchen",
+        "description": "",
+        "tasks": [],
+    }
+
+    with pytest.raises(ValueError, match="already exists"):
+        await story_manager.async_clone_story("kitchen", "Kitchen")
+
+    mock_storage.save_story.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_clone_story_persists_to_storage(story_manager, mock_storage):
+    """Test that clone_story calls storage.save_story with the new story data."""
+    mock_storage.async_story_exists.side_effect = [True, False]
+    mock_storage.load_story.return_value = {
+        "title": "Kitchen",
+        "description": "My kitchen",
+        "tasks": [
+            {
+                "id": "kitchen_task_0",
+                "title": "Paint",
+                "description": "Walls",
+                "assigned_to": None,
+                "state": "todo",
+                "order": 0,
+            },
+        ],
+    }
+    mock_storage.save_story.return_value = None
+
+    await story_manager.async_clone_story("kitchen", "Kitchen Copy")
+
+    mock_storage.save_story.assert_called_once()
+    call_args = mock_storage.save_story.call_args
+    new_story_id = call_args[0][0]
+    new_story_data = call_args[0][1]
+
+    assert new_story_id == "kitchen_copy"
+    assert new_story_data["title"] == "Kitchen Copy"
+    assert new_story_data["description"] == "My kitchen"
+    assert len(new_story_data["tasks"]) == 1
+    assert new_story_data["tasks"][0]["state"] == "todo"
+
+
+@pytest.mark.asyncio
+async def test_clone_story_preserves_task_content(story_manager, mock_storage):
+    """Test that task titles and descriptions are preserved in the clone."""
+    mock_storage.async_story_exists.side_effect = [True, False]
+    mock_storage.load_story.return_value = {
+        "title": "Kitchen",
+        "description": "",
+        "tasks": [
+            {
+                "id": "kitchen_task_0",
+                "title": "Paint walls",
+                "description": "Use white paint",
+                "assigned_to": None,
+                "state": "done",
+                "order": 0,
+            },
+        ],
+    }
+    mock_storage.save_story.return_value = None
+
+    result = await story_manager.async_clone_story("kitchen", "Kitchen Copy")
+
+    task = result["story_data"]["tasks"][0]
+    assert task["title"] == "Paint walls"
+    assert task["description"] == "Use white paint"
+
+
+@pytest.mark.asyncio
+async def test_clone_story_deep_copy_semantics(story_manager, mock_storage):
+    """Test that cloned story data does not share references with the original.
+
+    Mutating the cloned result must not affect the original source data that
+    was returned by the storage layer, ensuring the clone operation performs a
+    deep copy rather than a shallow one.
+    """
+    original_story_data = {
+        "title": "Kitchen",
+        "description": "Original description",
+        "tasks": [
+            {
+                "id": "kitchen_task_0",
+                "title": "Original Task",
+                "description": "Original desc",
+                "assigned_to": "person.john",
+                "state": "done",
+                "order": 0,
+            }
+        ],
+    }
+
+    mock_storage.async_story_exists.side_effect = [
+        True,  # source story "kitchen" exists
+        False,  # target story "kitchen_copy" does not yet exist
+    ]
+    mock_storage.load_story.return_value = original_story_data
+    mock_storage.save_story.return_value = None
+
+    result = await story_manager.async_clone_story("kitchen", "Kitchen Copy")
+
+    # Mutate the cloned data
+    result["story_data"]["tasks"][0]["title"] = "MUTATED TITLE"
+    result["story_data"]["tasks"][0]["state"] = "MUTATED STATE"
+    result["story_data"]["tasks"][0]["description"] = "MUTATED DESC"
+
+    # Verify original source data is unchanged (deep copy semantics)
+    assert original_story_data["tasks"][0]["title"] == "Original Task"
+    assert original_story_data["tasks"][0]["state"] == "done"
+    assert original_story_data["tasks"][0]["description"] == "Original desc"

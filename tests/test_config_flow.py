@@ -2,6 +2,14 @@ from custom_components.storyflow.const import DOMAIN
 from custom_components.storyflow.config_flow import _encode_task_line
 
 
+def _get_schema_defaults(result):
+    """Return a dict of field-name -> actual default value from a flow form result.
+
+    Voluptuous stores defaults as callables, so we call each one to get the value.
+    """
+    return {str(field): field.default() for field in result["data_schema"].schema}
+
+
 async def test_config_flow_creates_entry(hass):
     """Test that config flow creates a StoryFlow entry with valid data."""
 
@@ -82,9 +90,8 @@ async def test_options_flow_shows_form_prepopulated(hass):
     assert result["type"] == "form"
     assert result["step_id"] == "init"
 
-    # Build a mapping of field name -> default value
-    schema = result["data_schema"].schema
-    defaults = {str(field): field.default for field in schema}
+    # Voluptuous stores defaults as callables — call them to get the actual values
+    defaults = _get_schema_defaults(result)
 
     assert "story_name" in defaults
     assert "story_description" in defaults
@@ -175,9 +182,6 @@ async def test_options_flow_roundtrip_with_colons_in_title_and_description(hass)
     """Test that titles/descriptions containing colons survive a full round-trip."""
     entry = await _create_entry(hass)
 
-    # Submit with colons embedded in title and description (unescaped plain text
-    # for the initial write, using a plain ':' separator — the title should not
-    # contain a colon here since the first ':' is the separator)
     result = await hass.config_entries.options.async_init(entry.entry_id)
     await hass.config_entries.options.async_configure(
         result["flow_id"],
@@ -198,9 +202,9 @@ async def test_options_flow_roundtrip_with_colons_in_title_and_description(hass)
     # Now open options again — the pre-populated tasks_raw must re-encode the
     # colons so a second save produces the same result
     result2 = await hass.config_entries.options.async_init(updated_entry.entry_id)
-    schema_defaults = {str(f): f.default for f in result2["data_schema"].schema}
+    defaults2 = _get_schema_defaults(result2)
     expected_raw = "Step 1\\: setup: configure the server\\: port 8080"
-    assert schema_defaults["tasks_raw"] == expected_raw
+    assert defaults2["tasks_raw"] == expected_raw
 
 
 async def test_options_flow_preserves_story_id(hass):

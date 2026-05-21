@@ -6,10 +6,12 @@ import voluptuous as vol
 
 from homeassistant.core import HomeAssistant, ServiceCall
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN, TASK_STATES
 from .exceptions import TaskNotFoundError
-from .task_entity import get_task_unique_id
+from .story_progress_entity import StoryProgressEntity
+from .task_entity import TaskEntity, get_task_unique_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -201,9 +203,6 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 task_id = task_data["id"]
                 _LOGGER.debug("Created task data with ID: %s", task_id)
 
-                # Import TaskEntity here to avoid circular imports
-                from .task_entity import TaskEntity
-
                 # Create new TaskEntity
                 task_entity = TaskEntity(
                     story_id=story_id,
@@ -261,8 +260,6 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 await manager.async_delete_task(story_id, task_id)
 
                 # Remove entity from Home Assistant entity registry
-                from homeassistant.helpers import entity_registry as er
-
                 entity_reg = er.async_get(hass)
                 unique_id = get_task_unique_id(task_id)
                 ha_entity_id = entity_reg.async_get_entity_id(
@@ -374,9 +371,6 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     new_story_id,
                 )
             else:
-                from .story_progress_entity import StoryProgressEntity
-                from .task_entity import TaskEntity
-
                 new_entities = []
 
                 # Progress entity for the cloned story

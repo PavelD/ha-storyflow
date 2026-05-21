@@ -244,6 +244,77 @@ async def test_options_flow_requires_story_name(hass):
     assert "story_name" in result2["errors"]
 
 
+async def test_options_flow_preserves_task_state_for_matching_titles(hass):
+    """Test that options flow preserves state/assigned_to for tasks with same title."""
+    entry = await _create_entry(hass)
+
+    # Simulate a task being in_progress by patching entry data directly
+    tasks_with_state = list(entry.data["tasks"])
+    tasks_with_state[0] = {**tasks_with_state[0], "state": "in_progress"}
+    entry.hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "tasks": tasks_with_state}
+    )
+    entry = entry.hass.config_entries.async_get_entry(entry.entry_id)
+    assert entry.data["tasks"][0]["state"] == "in_progress"
+
+    # Edit via options flow — keep same task titles
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            "story_name": entry.data["story_name"],
+            "story_description": entry.data["story_description"],
+            "tasks_raw": "Drain water: Updated description\nTurn off pump",
+        },
+    )
+
+    updated_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    tasks = updated_entry.data["tasks"]
+    # State should be preserved since the title matches
+    assert tasks[0]["title"] == "Drain water"
+    assert tasks[0]["state"] == "in_progress"
+    # Description should be updated
+    assert tasks[0]["description"] == "Updated description"
+
+
+async def test_options_flow_rejects_whitespace_only_story_name(hass):
+    """Test that options flow rejects a story_name that consists only of whitespace."""
+    entry = await _create_entry(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result2 = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            "story_name": "   ",
+            "story_description": "",
+            "tasks_raw": "",
+        },
+    )
+
+    assert result2["type"] == "form"
+    assert "story_name" in result2["errors"]
+
+
+async def test_options_flow_trims_story_name(hass):
+    """Test that options flow accepts and stores a trimmed story_name."""
+    entry = await _create_entry(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result2 = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            "story_name": "  Winterizing the pool  ",
+            "story_description": "  Some description  ",
+            "tasks_raw": "Task A",
+        },
+    )
+
+    assert result2["type"] == "create_entry"
+    updated_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    assert updated_entry.data["story_name"] == "Winterizing the pool"
+    assert updated_entry.data["story_description"] == "Some description"
+
+
 async def test_options_flow_clears_tasks_when_tasks_raw_empty(hass):
     """Test that submitting an empty tasks_raw clears all tasks on the entry."""
     entry = await _create_entry(hass)

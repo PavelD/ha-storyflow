@@ -54,8 +54,22 @@ def _encode_task_line(task: dict) -> str:
     return f"{title}: {description}" if description else title
 
 
-def _parse_tasks_raw(tasks_raw: str) -> list:
-    """Parse a tasks_raw string into a list of task dicts."""
+def _parse_tasks_raw(tasks_raw: str, existing_tasks: list | None = None) -> list:
+    """Parse a tasks_raw string into a list of task dicts.
+
+    When *existing_tasks* is provided, the ``state`` and ``assigned_to`` values
+    of any task whose title matches an existing task are preserved rather than
+    being reset to defaults.  This avoids losing progress when a user edits a
+    story via the options flow.
+    """
+    # Build a lookup so we can restore state/assignee by title in O(1)
+    existing_by_title: dict = {}
+    if existing_tasks:
+        for t in existing_tasks:
+            title = t.get("title", "")
+            if title and title not in existing_by_title:
+                existing_by_title[title] = t
+
     tasks = []
     for line in tasks_raw.splitlines():
         line = line.strip()
@@ -64,12 +78,14 @@ def _parse_tasks_raw(tasks_raw: str) -> list:
         before, after = _split_unescaped_colon(line)
         task_title = _unescape(before.strip())
         desc = _unescape(after.strip()) if after is not None else ""
+
+        existing = existing_by_title.get(task_title)
         tasks.append(
             {
                 "title": task_title,
                 "description": desc,
-                "state": "todo",
-                "assigned_to": None,
+                "state": existing["state"] if existing else "todo",
+                "assigned_to": existing["assigned_to"] if existing else None,
             }
         )
     return tasks
@@ -160,7 +176,12 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             if not story_name:
                 errors["story_name"] = "required"
 
-            tasks = _parse_tasks_raw(tasks_raw)
+            # Preserve existing task state/assigned_to for tasks whose title
+            # matches one already stored in the entry.
+            tasks = _parse_tasks_raw(
+                tasks_raw,
+                existing_tasks=self._config_entry.data.get("tasks", []),
+            )
 
             if not errors:
                 # Preserve the original story_id — it is used as a stable key
@@ -180,6 +201,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 self.hass.config_entries.async_update_entry(
                     self._config_entry, data=new_data
                 )
+                # Explicitly reload the entry so the new data takes effect.
+                # HA only auto-reloads when entry.options changes; since we write
+                # to entry.data we must trigger the reload ourselves.
                 await self.hass.config_entries.async_reload(self._config_entry.entry_id)
                 return self.async_create_entry(title="", data={})
 

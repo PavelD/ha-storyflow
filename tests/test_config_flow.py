@@ -1,5 +1,5 @@
-import pytest
 from custom_components.storyflow.const import DOMAIN
+from custom_components.storyflow.config_flow import _encode_task_line
 
 
 async def test_config_flow_creates_entry(hass):
@@ -37,8 +37,18 @@ async def test_config_flow_creates_entry(hass):
     # Validate tasks
     first_task = data["tasks"][0]
     assert first_task["title"] == "Drain water"
+    assert first_task["description"] == "Remove ~10 cm"
     assert first_task["state"] == "todo"
     assert first_task["assigned_to"] is None
+
+    second_task = data["tasks"][1]
+    assert second_task["title"] == "Turn off pump"
+    assert second_task["description"] == ""
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
 async def _create_entry(hass):
@@ -58,6 +68,11 @@ async def _create_entry(hass):
     return hass.config_entries.async_entries(DOMAIN)[0]
 
 
+# ---------------------------------------------------------------------------
+# Options flow tests
+# ---------------------------------------------------------------------------
+
+
 async def test_options_flow_shows_form_prepopulated(hass):
     """Test that options flow shows a form pre-populated with current entry data."""
     entry = await _create_entry(hass)
@@ -67,12 +82,22 @@ async def test_options_flow_shows_form_prepopulated(hass):
     assert result["type"] == "form"
     assert result["step_id"] == "init"
 
-    # Schema defaults should reflect current entry data
+    # Build a mapping of field name -> default value
     schema = result["data_schema"].schema
-    field_names = [str(k) for k in schema]
-    assert "story_name" in field_names
-    assert "story_description" in field_names
-    assert "tasks_raw" in field_names
+    defaults = {str(field): field.default for field in schema}
+
+    assert "story_name" in defaults
+    assert "story_description" in defaults
+    assert "tasks_raw" in defaults
+
+    # Story fields should be pre-populated from the entry data
+    assert defaults["story_name"] == entry.data["story_name"]
+    assert defaults["story_description"] == entry.data["story_description"]
+
+    # tasks_raw should be pre-populated from the entry tasks using the same
+    # encoding used by the options flow (colon-safe round-trip format)
+    expected_tasks_raw = "\n".join(_encode_task_line(t) for t in entry.data["tasks"])
+    assert defaults["tasks_raw"] == expected_tasks_raw
 
 
 async def test_options_flow_updates_entry(hass):
@@ -87,18 +112,95 @@ async def test_options_flow_updates_entry(hass):
         user_input={
             "story_name": "Winterizing the pool (updated)",
             "story_description": "## Updated Steps",
-            "tasks_raw": "Drain water\nTurn off pump\nCover the pool",
+            # Include whitespace variation and a title-only line to exercise parsing
+            "tasks_raw": (
+                "Drain water\n"
+                "Turn off pump\n"
+                "Cover the pool: Use the winter cover\n"
+            ),
         },
     )
 
     assert result2["type"] == "create_entry"
 
-    # Reload the entry reference after update
     updated_entry = hass.config_entries.async_get_entry(entry.entry_id)
     assert updated_entry.data["story_name"] == "Winterizing the pool (updated)"
     assert updated_entry.data["story_description"] == "## Updated Steps"
-    assert len(updated_entry.data["tasks"]) == 3
-    assert updated_entry.data["tasks"][2]["title"] == "Cover the pool"
+
+    tasks = updated_entry.data["tasks"]
+    assert len(tasks) == 3
+
+    assert tasks[0]["title"] == "Drain water"
+    assert tasks[0]["description"] == ""
+
+    assert tasks[1]["title"] == "Turn off pump"
+    assert tasks[1]["description"] == ""
+
+    assert tasks[2]["title"] == "Cover the pool"
+    assert tasks[2]["description"] == "Use the winter cover"
+
+
+async def test_options_flow_parses_tasks_with_whitespace_and_colons(hass):
+    """Test that task parsing correctly trims whitespace and handles colons."""
+    entry = await _create_entry(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            "story_name": "Winterizing the pool",
+            "story_description": "",
+            # Leading/trailing whitespace around title and description
+            "tasks_raw": (
+                "  Task A  :  description A  \n" "Task B:description B\n" "  Task C  \n"
+            ),
+        },
+    )
+
+    updated_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    tasks = updated_entry.data["tasks"]
+    assert len(tasks) == 3
+
+    assert tasks[0]["title"] == "Task A"
+    assert tasks[0]["description"] == "description A"
+
+    assert tasks[1]["title"] == "Task B"
+    assert tasks[1]["description"] == "description B"
+
+    assert tasks[2]["title"] == "Task C"
+    assert tasks[2]["description"] == ""
+
+
+async def test_options_flow_roundtrip_with_colons_in_title_and_description(hass):
+    """Test that titles/descriptions containing colons survive a full round-trip."""
+    entry = await _create_entry(hass)
+
+    # Submit with colons embedded in title and description (unescaped plain text
+    # for the initial write, using a plain ':' separator — the title should not
+    # contain a colon here since the first ':' is the separator)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            "story_name": "Story",
+            "story_description": "",
+            # Use escaped colons in the title so they survive parsing
+            "tasks_raw": "Step 1\\: setup: configure the server\\: port 8080",
+        },
+    )
+
+    updated_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    tasks = updated_entry.data["tasks"]
+    assert len(tasks) == 1
+    assert tasks[0]["title"] == "Step 1: setup"
+    assert tasks[0]["description"] == "configure the server: port 8080"
+
+    # Now open options again — the pre-populated tasks_raw must re-encode the
+    # colons so a second save produces the same result
+    result2 = await hass.config_entries.options.async_init(updated_entry.entry_id)
+    schema_defaults = {str(f): f.default for f in result2["data_schema"].schema}
+    expected_raw = "Step 1\\: setup: configure the server\\: port 8080"
+    assert schema_defaults["tasks_raw"] == expected_raw
 
 
 async def test_options_flow_preserves_story_id(hass):
@@ -136,3 +238,24 @@ async def test_options_flow_requires_story_name(hass):
 
     assert result2["type"] == "form"
     assert "story_name" in result2["errors"]
+
+
+async def test_options_flow_clears_tasks_when_tasks_raw_empty(hass):
+    """Test that submitting an empty tasks_raw clears all tasks on the entry."""
+    entry = await _create_entry(hass)
+    assert len(entry.data["tasks"]) > 0  # pre-condition: entry has tasks
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result2 = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={
+            "story_name": entry.data["story_name"],
+            "story_description": entry.data["story_description"],
+            "tasks_raw": "",
+        },
+    )
+
+    assert result2["type"] == "create_entry"
+
+    updated_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    assert updated_entry.data["tasks"] == []

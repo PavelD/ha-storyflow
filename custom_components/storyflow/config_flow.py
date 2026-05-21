@@ -3,6 +3,82 @@ import voluptuous as vol
 from homeassistant.core import callback
 from .const import DOMAIN
 
+# ---------------------------------------------------------------------------
+# Task serialization helpers
+# ---------------------------------------------------------------------------
+
+
+def _escape(value: str) -> str:
+    """Escape backslashes and colons so tasks_raw is round-trip safe."""
+    return value.replace("\\", "\\\\").replace(":", "\\:")
+
+
+def _unescape(value: str) -> str:
+    """Reverse _escape: convert \\: → : and \\\\ → \\."""
+    result = []
+    i = 0
+    while i < len(value):
+        if value[i] == "\\" and i + 1 < len(value):
+            next_char = value[i + 1]
+            if next_char in (":", "\\"):
+                result.append(next_char)
+                i += 2
+                continue
+        result.append(value[i])
+        i += 1
+    return "".join(result)
+
+
+def _split_unescaped_colon(line: str):
+    """Split *line* at the first unescaped colon.
+
+    Returns ``(before, after)`` where *after* is the text after the colon
+    (may be an empty string), or ``(line, None)`` when no unescaped colon
+    exists.
+    """
+    i = 0
+    while i < len(line):
+        if line[i] == "\\" and i + 1 < len(line):
+            i += 2  # skip the escaped character
+        elif line[i] == ":":
+            return line[:i], line[i + 1 :]
+        else:
+            i += 1
+    return line, None
+
+
+def _encode_task_line(task: dict) -> str:
+    """Encode a task dict into a single tasks_raw line."""
+    title = _escape(task.get("title") or "")
+    description = _escape(task.get("description") or "")
+    return f"{title}: {description}" if description else title
+
+
+def _parse_tasks_raw(tasks_raw: str) -> list:
+    """Parse a tasks_raw string into a list of task dicts."""
+    tasks = []
+    for line in tasks_raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        before, after = _split_unescaped_colon(line)
+        task_title = _unescape(before.strip())
+        desc = _unescape(after.strip()) if after is not None else ""
+        tasks.append(
+            {
+                "title": task_title,
+                "description": desc,
+                "state": "todo",
+                "assigned_to": None,
+            }
+        )
+    return tasks
+
+
+# ---------------------------------------------------------------------------
+# Config flow
+# ---------------------------------------------------------------------------
+
 
 class StoryFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for StoryFlow."""
@@ -21,25 +97,7 @@ class StoryFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not story_name:
                 errors["story_name"] = "required"
 
-            # Parse tasks (one per line, format "title: desc" or just "title")
-            tasks = []
-            if tasks_raw:
-                for line in tasks_raw.splitlines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                    if ":" in line:
-                        task_name, desc = map(str.strip, line.split(":", 1))
-                    else:
-                        task_name, desc = line, ""
-                    tasks.append(
-                        {
-                            "title": task_name,
-                            "description": desc,
-                            "state": "todo",
-                            "assigned_to": None,
-                        }
-                    )
+            tasks = _parse_tasks_raw(tasks_raw)
 
             if not errors:
                 # Generate story_id using the same logic as StoryManager
@@ -78,6 +136,11 @@ class StoryFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return OptionsFlowHandler(config_entry)
 
 
+# ---------------------------------------------------------------------------
+# Options flow
+# ---------------------------------------------------------------------------
+
+
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options flow for StoryFlow (edit story details and tasks)."""
 
@@ -97,25 +160,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             if not story_name:
                 errors["story_name"] = "required"
 
-            # Parse tasks (one per line, format "title: desc" or just "title")
-            tasks = []
-            if tasks_raw:
-                for line in tasks_raw.splitlines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                    if ":" in line:
-                        task_title, desc = map(str.strip, line.split(":", 1))
-                    else:
-                        task_title, desc = line, ""
-                    tasks.append(
-                        {
-                            "title": task_title,
-                            "description": desc,
-                            "state": "todo",
-                            "assigned_to": None,
-                        }
-                    )
+            tasks = _parse_tasks_raw(tasks_raw)
 
             if not errors:
                 # Preserve the original story_id — it is used as a stable key
@@ -141,10 +186,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         # Pre-populate form with current values
         current_data = self._config_entry.data
         current_tasks = current_data.get("tasks", [])
-        tasks_raw_default = "\n".join(
-            f"{t['title']}: {t['description']}" if t.get("description") else t["title"]
-            for t in current_tasks
-        )
+        tasks_raw_default = "\n".join(_encode_task_line(t) for t in current_tasks)
 
         schema = vol.Schema(
             {

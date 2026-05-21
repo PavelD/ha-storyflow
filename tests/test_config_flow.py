@@ -251,10 +251,10 @@ async def test_options_flow_preserves_task_state_for_matching_titles(hass):
     # Simulate a task being in_progress by patching entry data directly
     tasks_with_state = list(entry.data["tasks"])
     tasks_with_state[0] = {**tasks_with_state[0], "state": "in_progress"}
-    entry.hass.config_entries.async_update_entry(
+    hass.config_entries.async_update_entry(
         entry, data={**entry.data, "tasks": tasks_with_state}
     )
-    entry = entry.hass.config_entries.async_get_entry(entry.entry_id)
+    entry = hass.config_entries.async_get_entry(entry.entry_id)
     assert entry.data["tasks"][0]["state"] == "in_progress"
 
     # Edit via options flow — keep same task titles

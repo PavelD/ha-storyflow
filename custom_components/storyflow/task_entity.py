@@ -33,9 +33,11 @@ class TaskEntity(SensorEntity):
         assigned_to=None,
         state="todo",
         order=None,
+        story_name=None,
     ):
         """Initialize the task entity."""
         self.story_id = story_id
+        self.story_name = story_name or story_id
         self.task_id = task_id
         self.title = title
         self.description = description
@@ -55,7 +57,7 @@ class TaskEntity(SensorEntity):
     @property
     def name(self) -> str:
         """Return the name of the task."""
-        return f"{self.story_id}: {self.title}"
+        return f"{self.story_name}: {self.title}"
 
     @property
     def state(self):
@@ -79,7 +81,7 @@ class TaskEntity(SensorEntity):
         """Return device info to group tasks under story."""
         return DeviceInfo(
             identifiers={(DOMAIN, self.story_id)},
-            name=f"Story: {self.story_id}",
+            name=self.story_name,
             manufacturer="StoryFlow",
             model="Story",
         )

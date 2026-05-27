@@ -9,9 +9,10 @@ from .const import DOMAIN
 class StoryProgressEntity(SensorEntity):
     """Represents the progress of a story."""
 
-    def __init__(self, story_id, tasks):
+    def __init__(self, story_id, tasks, story_name=None):
         """Initialize the progress entity."""
         self.story_id = story_id
+        self.story_name = story_name or story_id
         self.tasks = tasks
 
     @property
@@ -22,7 +23,7 @@ class StoryProgressEntity(SensorEntity):
     @property
     def name(self) -> str:
         """Return the name."""
-        return f"{self.story_id} Progress"
+        return f"{self.story_name} Progress"
 
     @property
     def state(self):
@@ -59,7 +60,7 @@ class StoryProgressEntity(SensorEntity):
         """Return device info."""
         return DeviceInfo(
             identifiers={(DOMAIN, self.story_id)},
-            name=f"Story: {self.story_id}",
+            name=self.story_name,
             manufacturer="StoryFlow",
             model="Story",
         )

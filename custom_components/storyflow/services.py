@@ -203,6 +203,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 task_id = task_data["id"]
                 _LOGGER.debug("Created task data with ID: %s", task_id)
 
+                # Retrieve story title for human-readable entity naming
+                story_data = await storage_handler.load_story(story_id)
+                story_title = story_data.get("title", story_id) if story_data else story_id
+
                 # Create new TaskEntity
                 task_entity = TaskEntity(
                     story_id=story_id,
@@ -213,6 +217,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     assigned_to=assigned_to,
                     state=state,
                     order=task_data.get("order", 0),
+                    story_name=story_title,
                 )
 
                 # Register entity with Home Assistant using stored callback
@@ -377,11 +382,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 progress_entity = StoryProgressEntity(
                     story_id=new_story_id,
                     tasks=new_story_data.get("tasks", []),
+                    story_name=new_story_data.get("title", new_story_id),
                 )
                 hass.data[DOMAIN]["progress_entities"][new_story_id] = progress_entity
                 new_entities.append(progress_entity)
 
                 # Task entities for the cloned story
+                cloned_story_name = new_story_data.get("title", new_story_id)
                 for task_data in new_story_data.get("tasks", []):
                     task_entity = TaskEntity(
                         story_id=new_story_id,
@@ -392,6 +399,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                         assigned_to=task_data.get("assigned_to"),
                         state=task_data.get("state", "todo"),
                         order=task_data.get("order", 0),
+                        story_name=cloned_story_name,
                     )
                     new_entities.append(task_entity)
                     hass.data[DOMAIN]["task_entities"][task_data["id"]] = task_entity

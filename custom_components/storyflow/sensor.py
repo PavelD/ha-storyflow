@@ -22,14 +22,14 @@ async def async_setup_entry(
 
     # Prefer persisted story_id; fall back to legacy derivation for existing entries
     story_id = entry.data.get("story_id")
+    story_name = entry.data.get("story_name", "")
     if story_id is None:
-        story_name = entry.data.get("story_name", "")
         story_id = story_name.lower().replace(" ", "_")
 
     tasks = entry.data.get("tasks", [])
 
     # Create progress sensor for the story
-    progress_entity = StoryProgressEntity(story_id, tasks)
+    progress_entity = StoryProgressEntity(story_id, tasks, story_name=story_name)
     sensors = [progress_entity]
 
     # Store callback and progress entity for dynamic entity management
@@ -53,6 +53,7 @@ async def async_setup_entry(
             assigned_to=task.get("assigned_to"),
             state=task.get("state", "todo"),
             order=idx,
+            story_name=story_name,
         )
         sensors.append(task_entity)
 

@@ -9,7 +9,7 @@ from .services import async_setup_services, async_unload_services
 from .storage_handler import StorageHandler
 from .story_manager import StoryManager
 
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "select"]
 
 
 def get_task_entity(hass: HomeAssistant, task_id: str):

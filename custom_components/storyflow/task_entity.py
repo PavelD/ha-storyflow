@@ -2,7 +2,7 @@
 
 import logging
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.select import SelectEntity
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN, TASK_STATES
@@ -20,8 +20,8 @@ def get_task_unique_id(task_id: str) -> str:
     return f"{DOMAIN}_{task_id}"
 
 
-class TaskEntity(SensorEntity):
-    """Representation of a Task."""
+class TaskEntity(SelectEntity):
+    """Representation of a Task as a selectable state entity."""
 
     def __init__(
         self,
@@ -34,6 +34,7 @@ class TaskEntity(SensorEntity):
         state="todo",
         order=None,
         story_name=None,
+        progress_entity=None,
     ):
         """Initialize the task entity."""
         self.story_id = story_id
@@ -44,6 +45,7 @@ class TaskEntity(SensorEntity):
         self.assigned_to = assigned_to
         self.order = order
         self.storage_handler = storage_handler
+        self._progress_entity = progress_entity
 
         if state not in TASK_STATES:
             raise ValueError(f"Invalid state '{state}'. Must be one of {TASK_STATES}")
@@ -65,8 +67,19 @@ class TaskEntity(SensorEntity):
         return "mdi:timeline-check-outline"
 
     @property
+    def options(self) -> list[str]:
+        """Return the list of available states."""
+        return list(TASK_STATES)
+
+    @property
+    def current_option(self) -> str:
+        """Return the current state."""
+        return self._state
+
+    # Keep state property for backward compatibility with services/tests
+    @property
     def state(self):
-        """Return the state."""
+        """Return the state (alias for current_option)."""
         return self._state
 
     @property
@@ -90,6 +103,29 @@ class TaskEntity(SensorEntity):
             manufacturer="StoryFlow",
             model="Story",
         )
+
+    async def async_select_option(self, option: str) -> None:
+        """Handle state change from the HA UI dropdown.
+
+        This is called when the user picks a value from the select dropdown
+        in the Home Assistant frontend.  It persists the new state to storage
+        and refreshes the progress entity so the percentage updates immediately.
+        """
+        await self.async_update_state(option)
+        await self._async_refresh_progress()
+
+    async def _async_refresh_progress(self) -> None:
+        """Reload tasks from storage and push update to the progress entity."""
+        if self._progress_entity is None:
+            return
+        try:
+            story_data = await self.storage_handler.load_story(self.story_id)
+            self._progress_entity.tasks = story_data.get("tasks", [])
+            self._progress_entity.async_write_ha_state()
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.warning(
+                "Could not refresh progress for story %s: %s", self.story_id, err
+            )
 
     async def async_update_state(self, new_state: str) -> None:
         """Update the task state and persist to storage.

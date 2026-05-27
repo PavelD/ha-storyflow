@@ -217,7 +217,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     story_data.get("title", story_id) if story_data else story_id
                 )
 
-                # Create new TaskEntity
+                # Create new TaskEntity (inject progress_entity for UI refresh)
+                progress_entity = (
+                    hass.data[DOMAIN].get("progress_entities", {}).get(story_id)
+                )
                 task_entity = TaskEntity(
                     story_id=story_id,
                     task_id=task_id,
@@ -228,6 +231,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     state=state,
                     order=task_data.get("order", 0),
                     story_name=story_title,
+                    progress_entity=progress_entity,
                 )
 
                 # Register entity with Home Assistant using stored callback
@@ -278,7 +282,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 entity_reg = er.async_get(hass)
                 unique_id = get_task_unique_id(task_id)
                 ha_entity_id = entity_reg.async_get_entity_id(
-                    "sensor", DOMAIN, unique_id
+                    "select", DOMAIN, unique_id
                 )
                 if ha_entity_id:
                     entity_reg.async_remove(ha_entity_id)
@@ -370,36 +374,37 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             new_story_id = result["story_id"]
             new_story_data = result["story_data"]
 
-            # Re-use the source story's entity callback for the clone.
-            # This avoids picking an arbitrary callback when multiple config
-            # entries / platforms are registered and guarantees the clone is
-            # added to the same platform as the original story.
-            entity_callbacks = hass.data[DOMAIN].get("entity_callbacks", {})
-            async_add_entities = entity_callbacks.get(story_id)
+            # Use platform-specific callbacks: sensor for progress, select for tasks.
+            sensor_add = hass.data[DOMAIN].get("sensor_callbacks", {}).get(story_id)
+            select_add = hass.data[DOMAIN].get("entity_callbacks", {}).get(story_id)
 
-            if async_add_entities is None:
+            if sensor_add is None or select_add is None:
                 _LOGGER.warning(
-                    "No entity callback is currently registered for story '%s'; "
-                    "entities for cloned story '%s' will only be added once the "
-                    "corresponding platform is loaded or reloaded",
+                    "Platform callbacks missing for story '%s' (sensor=%s, select=%s); "
+                    "entities for cloned story '%s' will appear after reload",
                     story_id,
+                    sensor_add is not None,
+                    select_add is not None,
                     new_story_id,
                 )
             else:
-                new_entities = []
+                cloned_story_name = new_story_data.get("title", new_story_id)
+                cloned_tasks = new_story_data.get("tasks", [])
 
-                # Progress entity for the cloned story
+                # Progress entity → sensor platform
                 progress_entity = StoryProgressEntity(
                     story_id=new_story_id,
-                    tasks=new_story_data.get("tasks", []),
-                    story_name=new_story_data.get("title", new_story_id),
+                    tasks=cloned_tasks,
+                    story_name=cloned_story_name,
                 )
-                hass.data[DOMAIN]["progress_entities"][new_story_id] = progress_entity
-                new_entities.append(progress_entity)
+                hass.data[DOMAIN].setdefault("progress_entities", {})[
+                    new_story_id
+                ] = progress_entity
+                sensor_add([progress_entity])
 
-                # Task entities for the cloned story
-                cloned_story_name = new_story_data.get("title", new_story_id)
-                for task_data in new_story_data.get("tasks", []):
+                # Task entities → select platform
+                task_entities = []
+                for task_data in cloned_tasks:
                     task_entity = TaskEntity(
                         story_id=new_story_id,
                         task_id=task_data["id"],
@@ -410,15 +415,15 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                         state=task_data.get("state", "todo"),
                         order=task_data.get("order", 0),
                         story_name=cloned_story_name,
+                        progress_entity=progress_entity,
                     )
-                    new_entities.append(task_entity)
+                    task_entities.append(task_entity)
                     hass.data[DOMAIN]["task_entities"][task_data["id"]] = task_entity
 
-                # Register the callback for the new story so add_task works on it too
-                hass.data[DOMAIN]["entity_callbacks"][new_story_id] = async_add_entities
-
-                # Add all new entities to Home Assistant
-                async_add_entities(new_entities)
+                # Register the select callback so add_task works on the cloned story
+                hass.data[DOMAIN]["entity_callbacks"][new_story_id] = select_add
+                hass.data[DOMAIN]["sensor_callbacks"][new_story_id] = sensor_add
+                select_add(task_entities)
 
             _LOGGER.info(
                 "Successfully cloned story '%s' → '%s'",

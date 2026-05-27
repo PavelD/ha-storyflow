@@ -29,6 +29,42 @@ def story_manager(mock_storage, mock_hass):
 
 
 @pytest.mark.asyncio
+async def test_create_story_success(story_manager, mock_storage):
+    """Test creating a new story when it does not exist yet."""
+    mock_storage.async_story_exists.return_value = False
+    mock_storage.save_story.return_value = None
+
+    story_id = await story_manager.create_story(
+        "My Story", "A description", [{"title": "Task 1"}]
+    )
+
+    assert story_id == "my_story"
+    mock_storage.save_story.assert_called_once_with(
+        "my_story",
+        {
+            "title": "My Story",
+            "description": "A description",
+            "tasks": [{"title": "Task 1"}],
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_story_raises_if_already_exists(story_manager, mock_storage):
+    """Test that create_story raises ValueError if the story ID already exists.
+
+    This prevents task states from being overwritten on HA restart/reload.
+    """
+    mock_storage.async_story_exists.return_value = True
+
+    with pytest.raises(ValueError, match="already exists"):
+        await story_manager.create_story("My Story", "desc", [])
+
+    # Save must never be called when story already exists
+    mock_storage.save_story.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_validate_story_exists_success(story_manager, mock_storage):
     """Test validating an existing story."""
     mock_storage.async_story_exists.return_value = True
@@ -262,7 +298,8 @@ async def test_assign_task_task_not_found(story_manager, mock_storage):
 
 @pytest.mark.asyncio
 async def test_create_story(story_manager, mock_storage):
-    """Test creating a new story."""
+    """Test creating a new story (story does not exist yet)."""
+    mock_storage.async_story_exists.return_value = False
     tasks = [
         {"id": "task1", "title": "Task 1", "state": "todo"},
         {"id": "task2", "title": "Task 2", "state": "todo"},

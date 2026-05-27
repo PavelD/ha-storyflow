@@ -32,8 +32,19 @@ class StoryManager:
         return slug or "story"
 
     async def create_story(self, title, description, tasks):
-        """Create a new story and save it to storage."""
+        """Create a new story and save it to storage.
+
+        Raises:
+            ValueError: If a story with the generated ID already exists.
+        """
         story_id = self._generate_story_id(title)
+
+        if await self.storage.async_story_exists(story_id):
+            raise ValueError(
+                f"Story '{story_id}' already exists. "
+                "Use a unique title or update the existing story."
+            )
+
         data = {
             "title": title,
             "description": description,

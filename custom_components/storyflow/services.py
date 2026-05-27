@@ -140,6 +140,14 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 _LOGGER.info(
                     "Successfully updated task %s to state %s", task_id, new_state
                 )
+
+                # Refresh progress entity so it reflects the new state
+                story_id = task_entity.story_id
+                _, storage_handler = await _get_manager_and_storage_for_story(
+                    hass, story_id
+                )
+                await _refresh_progress_entity(hass, story_id, storage_handler)
+
             except ValueError as err:
                 _LOGGER.error("Failed to update task %s: %s", task_id, err)
                 raise
@@ -205,7 +213,9 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
                 # Retrieve story title for human-readable entity naming
                 story_data = await storage_handler.load_story(story_id)
-                story_title = story_data.get("title", story_id) if story_data else story_id
+                story_title = (
+                    story_data.get("title", story_id) if story_data else story_id
+                )
 
                 # Create new TaskEntity
                 task_entity = TaskEntity(

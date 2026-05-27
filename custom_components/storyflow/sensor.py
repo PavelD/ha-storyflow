@@ -26,7 +26,13 @@ async def async_setup_entry(
     if story_id is None:
         story_id = story_name.lower().replace(" ", "_")
 
-    tasks = entry.data.get("tasks", [])
+    # Load tasks from persistent storage to preserve current state (e.g. after reload)
+    story_data = await storage_handler.load_story(story_id)
+    if story_data is not None:
+        tasks = story_data.get("tasks", [])
+    else:
+        # Fallback to config entry data on very first setup (storage not yet written)
+        tasks = entry.data.get("tasks", [])
 
     # Create progress sensor for the story
     progress_entity = StoryProgressEntity(story_id, tasks, story_name=story_name)
@@ -41,18 +47,20 @@ async def async_setup_entry(
     hass.data[DOMAIN]["entity_callbacks"][story_id] = async_add_entities
     hass.data[DOMAIN]["progress_entities"][story_id] = progress_entity
 
-    # Create task entities and register them in the entity lookup
-    for idx, task in enumerate(tasks):
-        task_id = f"{story_id}_task_{idx}"
+    # Create task entities from storage data to preserve current task states
+    for task in tasks:
+        task_id = task.get("id")
+        if not task_id:
+            continue
         task_entity = TaskEntity(
             story_id=story_id,
             task_id=task_id,
-            title=task["title"],
-            description=task["description"],
+            title=task.get("title", ""),
+            description=task.get("description", ""),
             storage_handler=storage_handler,
             assigned_to=task.get("assigned_to"),
             state=task.get("state", "todo"),
-            order=idx,
+            order=task.get("order", 0),
             story_name=story_name,
         )
         sensors.append(task_entity)

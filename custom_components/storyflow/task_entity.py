@@ -60,6 +60,11 @@ class TaskEntity(SensorEntity):
         return f"{self.story_name}: {self.title}"
 
     @property
+    def icon(self) -> str:
+        """Return the icon."""
+        return "mdi:timeline-check-outline"
+
+    @property
     def state(self):
         """Return the state."""
         return self._state

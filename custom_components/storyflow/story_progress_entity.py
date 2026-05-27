@@ -35,6 +35,11 @@ class StoryProgressEntity(SensorEntity):
         return int(done / len(self.tasks) * 100)
 
     @property
+    def icon(self) -> str:
+        """Return the icon."""
+        return "mdi:progress-check"
+
+    @property
     def unit_of_measurement(self) -> str:
         """Return unit of measurement."""
         return "%"

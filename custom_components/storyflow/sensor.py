@@ -17,7 +17,7 @@ async def async_setup_entry(
 ) -> bool:
     """Set up StoryFlow sensor entities."""
     # Get storage handler from hass.data
-    entry_data = hass.data[DOMAIN][entry.entry_id]
+    entry_data = hass.data[DOMAIN]["entries"][entry.entry_id]
     storage_handler = entry_data["storage"]
 
     # Prefer persisted story_id; fall back to legacy derivation for existing entries

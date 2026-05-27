@@ -224,9 +224,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     "story_description",
                     default=current_data.get("story_description", ""),
                 ): str,
-                vol.Optional("tasks_raw", default=tasks_raw_default): selector.TextSelector(
-                    selector.TextSelectorConfig(multiline=True)
-                ),
+                vol.Optional(
+                    "tasks_raw", default=tasks_raw_default
+                ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
             }
         )
 

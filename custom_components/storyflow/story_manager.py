@@ -34,6 +34,9 @@ class StoryManager:
     async def create_story(self, title, description, tasks):
         """Create a new story and save it to storage.
 
+        Generates ``id`` and ``order`` for any tasks that are missing them so
+        that sensor.py can always rely on every persisted task having an id.
+
         Raises:
             ValueError: If a story with the generated ID already exists.
         """
@@ -45,10 +48,20 @@ class StoryManager:
                 "Use a unique title or update the existing story."
             )
 
+        # Ensure every task has an id and an order before persisting
+        tasks_with_ids = []
+        for idx, task in enumerate(tasks):
+            task_data = dict(task)
+            if not task_data.get("id"):
+                task_data["id"] = f"{story_id}_task_{idx}"
+            if "order" not in task_data:
+                task_data["order"] = idx
+            tasks_with_ids.append(task_data)
+
         data = {
             "title": title,
             "description": description,
-            "tasks": tasks,
+            "tasks": tasks_with_ids,
         }
         await self.storage.save_story(story_id, data)
         return story_id

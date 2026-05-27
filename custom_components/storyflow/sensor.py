@@ -48,10 +48,11 @@ async def async_setup_entry(
     hass.data[DOMAIN]["progress_entities"][story_id] = progress_entity
 
     # Create task entities from storage data to preserve current task states
-    for task in tasks:
+    for idx, task in enumerate(tasks):
         task_id = task.get("id")
+        # Migration: generate id for legacy tasks that were saved without one
         if not task_id:
-            continue
+            task_id = f"{story_id}_task_{idx}"
         task_entity = TaskEntity(
             story_id=story_id,
             task_id=task_id,

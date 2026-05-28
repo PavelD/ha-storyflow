@@ -752,7 +752,7 @@ async def test_add_task_story_not_in_callbacks(hass: HomeAssistant):
     """Test add_task raises ValueError when story has no entity callback."""
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
-        "entity_callbacks": {},  # No callback for this story
+        "select_callbacks": {},  # No callback for this story
         "task_entities": {},
         "progress_entities": {},
     }
@@ -820,7 +820,7 @@ async def test_add_task_success_creates_entity(
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
-        "entity_callbacks": {"kitchen": mock_add_entities},
+        "select_callbacks": {"kitchen": mock_add_entities},
         "task_entities": {},
         "progress_entities": {"kitchen": mock_progress},
         "entries": {
@@ -860,7 +860,7 @@ async def test_add_task_success_updates_progress(
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
-        "entity_callbacks": {"kitchen": MagicMock()},
+        "select_callbacks": {"kitchen": MagicMock()},
         "task_entities": {},
         "progress_entities": {"kitchen": mock_progress},
         "entries": {
@@ -900,7 +900,7 @@ async def test_add_task_with_all_optional_fields(
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
-        "entity_callbacks": {"kitchen": MagicMock()},
+        "select_callbacks": {"kitchen": MagicMock()},
         "task_entities": {},
         "progress_entities": {"kitchen": MagicMock()},
         "entries": {
@@ -941,7 +941,7 @@ async def test_add_task_default_state_passed_to_manager(
     """Test add_task service uses 'todo' as default state."""
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
-        "entity_callbacks": {"kitchen": MagicMock()},
+        "select_callbacks": {"kitchen": MagicMock()},
         "task_entities": {},
         "progress_entities": {"kitchen": MagicMock()},
         "entries": {
@@ -970,7 +970,7 @@ async def test_add_task_manager_not_found_raises(hass: HomeAssistant):
     """Test add_task raises ValueError when no manager entry found for story."""
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
-        "entity_callbacks": {"kitchen": MagicMock()},
+        "select_callbacks": {"kitchen": MagicMock()},
         "task_entities": {},
         "progress_entities": {},
         # No entry_data with manager + matching storage
@@ -991,7 +991,7 @@ async def test_add_task_all_valid_states_pass_schema(hass: HomeAssistant):
     for state in TASK_STATES:
         hass.data[DOMAIN] = {
             "service_ref_count": 0,
-            "entity_callbacks": {},  # Will fail at story lookup, but schema is valid
+            "select_callbacks": {},  # Will fail at story lookup, but schema is valid
         }
         await async_setup_services(hass)
 
@@ -1024,7 +1024,7 @@ async def test_add_task_manager_raises_value_error(
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
-        "entity_callbacks": {"kitchen": MagicMock()},
+        "select_callbacks": {"kitchen": MagicMock()},
         "task_entities": initial_task_entities,
         "progress_entities": {"kitchen": mock_progress},
         "entries": {
@@ -1821,7 +1821,7 @@ async def test_clone_story_success(hass: HomeAssistant):
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {},
-        "entity_callbacks": {story_id: mock_select_add},
+        "select_callbacks": {story_id: mock_select_add},
         "sensor_callbacks": {story_id: mock_sensor_add},
         "progress_entities": {},
         "entries": {
@@ -1879,7 +1879,7 @@ async def test_clone_story_source_not_found(hass: HomeAssistant):
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {},
-        "entity_callbacks": {},
+        "select_callbacks": {},
         "progress_entities": {},
         "entries": {
             "entry_data": {
@@ -1914,7 +1914,7 @@ async def test_clone_story_manager_raises_propagates(hass: HomeAssistant):
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {},
-        "entity_callbacks": {story_id: mock_add_entities},
+        "select_callbacks": {story_id: mock_add_entities},
         "progress_entities": {},
         "entries": {
             "entry_kitchen": {
@@ -1955,7 +1955,7 @@ async def test_clone_story_no_entity_callback_does_not_raise(hass: HomeAssistant
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {},
-        "entity_callbacks": {},  # No callbacks at all
+        "select_callbacks": {},  # No callbacks at all
         "progress_entities": {},
         "entries": {
             "entry_kitchen": {
@@ -2001,7 +2001,7 @@ async def test_clone_story_registers_callback_for_new_story(hass: HomeAssistant)
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {},
-        "entity_callbacks": {story_id: mock_add_entities},
+        "select_callbacks": {story_id: mock_add_entities},
         "sensor_callbacks": {story_id: mock_sensor_add},
         "progress_entities": {},
         "entries": {
@@ -2021,7 +2021,7 @@ async def test_clone_story_registers_callback_for_new_story(hass: HomeAssistant)
     )
 
     # The new story's callback must be registered so add_task works on the clone too
-    assert "kitchen_copy" in hass.data[DOMAIN]["entity_callbacks"]
+    assert "kitchen_copy" in hass.data[DOMAIN]["select_callbacks"]
 
 
 async def test_clone_story_schema_rejects_missing_story_id(hass: HomeAssistant):

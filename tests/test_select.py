@@ -127,8 +127,8 @@ async def test_select_setup_entry_handles_legacy_tasks_without_id():
 
 
 @pytest.mark.asyncio
-async def test_select_setup_entry_registers_entity_callbacks():
-    """async_setup_entry should register async_add_entities under entity_callbacks."""
+async def test_select_setup_entry_registers_select_callbacks():
+    """async_setup_entry should register async_add_entities under select_callbacks."""
     storage = _make_mock_storage({"tasks": []})
     hass = _make_hass(storage)
     entry = _make_mock_entry()
@@ -136,9 +136,48 @@ async def test_select_setup_entry_registers_entity_callbacks():
 
     await async_setup_entry(hass, entry, async_add_entities)
 
-    callbacks = hass.data[DOMAIN].get("entity_callbacks", {})
+    callbacks = hass.data[DOMAIN].get("select_callbacks", {})
     assert "story-1" in callbacks
     assert callbacks["story-1"] is async_add_entities
+
+
+@pytest.mark.asyncio
+async def test_select_setup_entry_uses_story_name_when_story_id_missing():
+    """async_setup_entry should derive story_id from story_name when story_id is absent."""
+    stored_tasks = [
+        {"id": "task-1", "title": "Task 1", "state": "todo"},
+    ]
+    storage = _make_mock_storage(
+        {
+            "title": "Legacy Story",
+            "tasks": stored_tasks,
+        }
+    )
+    hass = _make_hass(storage, story_id="legacy_story")
+
+    # Build an entry without story_id — only story_name is present (legacy config style).
+    entry = _make_mock_entry(story_id=None, story_name="Legacy Story")
+    entry.data.pop("story_id", None)
+
+    async_add_entities = MagicMock()
+
+    await async_setup_entry(hass, entry, async_add_entities)
+
+    # The platform derives story_id via story_name.lower().replace(" ", "_")
+    expected_story_id = "legacy_story"
+
+    callbacks = hass.data[DOMAIN].get("select_callbacks", {})
+    assert expected_story_id in callbacks
+    assert callbacks[expected_story_id] is async_add_entities
+
+    # Entities must have been created for the derived story_id.
+    async_add_entities.assert_called()
+    created_entities = async_add_entities.call_args[0][0]
+    assert created_entities, "No entities were created for the derived story_id"
+    assert all(
+        getattr(entity, "story_id", None) == expected_story_id
+        for entity in created_entities
+    )
 
 
 @pytest.mark.asyncio

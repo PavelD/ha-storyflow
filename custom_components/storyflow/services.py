@@ -189,7 +189,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             )
 
             # Check if story exists by trying to get its callback
-            if story_id not in hass.data[DOMAIN].get("entity_callbacks", {}):
+            if story_id not in hass.data[DOMAIN].get("select_callbacks", {}):
                 _LOGGER.error("Story '%s' not found or not set up", story_id)
                 raise ValueError(f"Story '{story_id}' not found")
 
@@ -235,7 +235,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 )
 
                 # Register entity with Home Assistant using stored callback
-                async_add_entities = hass.data[DOMAIN]["entity_callbacks"][story_id]
+                async_add_entities = hass.data[DOMAIN]["select_callbacks"][story_id]
                 async_add_entities([task_entity])
 
                 # Add entity to entity lookup registry
@@ -281,9 +281,16 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 # Remove entity from Home Assistant entity registry
                 entity_reg = er.async_get(hass)
                 unique_id = get_task_unique_id(task_id)
+
+                # Prefer the new select-based task entity, but fall back to the
+                # legacy sensor-based entity so both can be cleaned up.
                 ha_entity_id = entity_reg.async_get_entity_id(
                     "select", DOMAIN, unique_id
                 )
+                if not ha_entity_id:
+                    ha_entity_id = entity_reg.async_get_entity_id(
+                        "sensor", DOMAIN, unique_id
+                    )
                 if ha_entity_id:
                     entity_reg.async_remove(ha_entity_id)
                     _LOGGER.debug(
@@ -376,7 +383,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
             # Use platform-specific callbacks: sensor for progress, select for tasks.
             sensor_add = hass.data[DOMAIN].get("sensor_callbacks", {}).get(story_id)
-            select_add = hass.data[DOMAIN].get("entity_callbacks", {}).get(story_id)
+            select_add = hass.data[DOMAIN].get("select_callbacks", {}).get(story_id)
 
             if sensor_add is None or select_add is None:
                 _LOGGER.warning(
@@ -421,7 +428,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     hass.data[DOMAIN]["task_entities"][task_data["id"]] = task_entity
 
                 # Register the select callback so add_task works on the cloned story
-                hass.data[DOMAIN]["entity_callbacks"][new_story_id] = select_add
+                hass.data[DOMAIN]["select_callbacks"][new_story_id] = select_add
                 hass.data[DOMAIN]["sensor_callbacks"][new_story_id] = sensor_add
                 select_add(task_entities)
 

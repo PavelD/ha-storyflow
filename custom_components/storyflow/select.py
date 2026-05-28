@@ -35,8 +35,8 @@ async def async_setup_entry(
 
     # Store the callback so dynamic add_task / clone_story services can add
     # new task entities to this platform without a full reload.
-    hass.data[DOMAIN].setdefault("entity_callbacks", {})
-    hass.data[DOMAIN]["entity_callbacks"][story_id] = async_add_entities
+    hass.data[DOMAIN].setdefault("select_callbacks", {})
+    hass.data[DOMAIN]["select_callbacks"][story_id] = async_add_entities
 
     entities = []
     for idx, task in enumerate(tasks):

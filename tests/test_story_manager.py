@@ -65,6 +65,58 @@ async def test_create_story_raises_if_already_exists(story_manager, mock_storage
 
 
 @pytest.mark.asyncio
+async def test_create_story_generates_task_id_and_order(story_manager, mock_storage):
+    """create_story should fill in missing task id and order before persisting."""
+    mock_storage.async_story_exists.return_value = False
+    mock_storage.save_story.return_value = None
+
+    tasks = [
+        {"title": "Task 1"},
+        {"title": "Task 2"},
+    ]
+
+    await story_manager.create_story("My Story", "A description", tasks)
+
+    assert mock_storage.save_story.call_count == 1
+    _, saved_story = mock_storage.save_story.call_args[0]
+    saved_tasks = saved_story["tasks"]
+
+    # All tasks should have id and order populated
+    assert len(saved_tasks) == 2
+    for task in saved_tasks:
+        assert "id" in task and task["id"]
+        assert "order" in task
+
+    # Order should be deterministic (ascending)
+    orders = [task["order"] for task in saved_tasks]
+    assert orders == sorted(orders)
+
+
+@pytest.mark.asyncio
+async def test_create_story_preserves_existing_task_id_and_order(
+    story_manager, mock_storage
+):
+    """create_story should not overwrite provided task id and order."""
+    mock_storage.async_story_exists.return_value = False
+    mock_storage.save_story.return_value = None
+
+    tasks = [
+        {"id": "task-1", "order": 10, "title": "Task 1"},
+        {"id": "task-2", "order": 20, "title": "Task 2"},
+    ]
+
+    await story_manager.create_story("My Story", "A description", tasks)
+
+    assert mock_storage.save_story.call_count == 1
+    _, saved_story = mock_storage.save_story.call_args[0]
+    saved_tasks = saved_story["tasks"]
+
+    # Existing id and order must be preserved
+    assert [task["id"] for task in saved_tasks] == ["task-1", "task-2"]
+    assert [task["order"] for task in saved_tasks] == [10, 20]
+
+
+@pytest.mark.asyncio
 async def test_validate_story_exists_success(story_manager, mock_storage):
     """Test validating an existing story."""
     mock_storage.async_story_exists.return_value = True

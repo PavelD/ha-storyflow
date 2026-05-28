@@ -52,7 +52,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     story_name = entry.data.get("story_name")
     story_id = entry.data.get("story_id")
     if story_id is None:
-        story_id = manager._generate_story_id(story_name)
+        story_id = manager.generate_story_id(story_name)
 
     # Only create/save story on first-time setup; preserve existing task states
     if not await storage.async_story_exists(story_id):

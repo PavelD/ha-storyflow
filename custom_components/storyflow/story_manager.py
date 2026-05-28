@@ -16,7 +16,7 @@ class StoryManager:
         self.storage = storage_handler
         self.hass = hass
 
-    def _generate_story_id(self, title: str) -> str:
+    def generate_story_id(self, title: str) -> str:
         """Generate a normalized, stable story_id from a human-readable title.
 
         - Lowercase
@@ -40,7 +40,7 @@ class StoryManager:
         Raises:
             ValueError: If a story with the generated ID already exists.
         """
-        story_id = self._generate_story_id(title)
+        story_id = self.generate_story_id(title)
 
         if await self.storage.async_story_exists(story_id):
             raise ValueError(
@@ -342,7 +342,7 @@ class StoryManager:
             source_title = source_data.get("title", story_id)
             new_title = f"{source_title} (Copy)"
 
-        new_story_id = self._generate_story_id(new_title)
+        new_story_id = self.generate_story_id(new_title)
 
         # Ensure the new story_id does not clash with an existing one
         if await self.storage.async_story_exists(new_story_id):

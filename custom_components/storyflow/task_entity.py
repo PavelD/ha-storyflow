@@ -120,7 +120,18 @@ class TaskEntity(SelectEntity):
             return
         try:
             story_data = await self.storage_handler.load_story(self.story_id)
-            self._progress_entity.tasks = story_data.get("tasks", [])
+
+            if not isinstance(story_data, dict):
+                _LOGGER.warning(
+                    "Story data for %s is missing or malformed while refreshing "
+                    "progress; treating as no tasks",
+                    self.story_id,
+                )
+                tasks: list = []
+            else:
+                tasks = story_data.get("tasks", [])
+
+            self._progress_entity.tasks = tasks
             self._progress_entity.async_write_ha_state()
         except Exception as err:  # noqa: BLE001
             _LOGGER.warning(

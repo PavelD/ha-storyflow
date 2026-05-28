@@ -9,7 +9,7 @@ from .services import async_setup_services, async_unload_services
 from .storage_handler import StorageHandler
 from .story_manager import StoryManager
 
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "select"]
 
 
 def get_task_entity(hass: HomeAssistant, task_id: str):
@@ -50,11 +50,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     manager = StoryManager(storage, hass)
 
     story_name = entry.data.get("story_name")
-    story_desc = entry.data.get("story_description", "")
-    tasks = entry.data.get("tasks", [])
+    story_id = entry.data.get("story_id")
+    if story_id is None:
+        story_id = manager.generate_story_id(story_name)
 
-    # Save the story to persistent storage
-    await manager.create_story(story_name, story_desc, tasks)
+    # Only create/save story on first-time setup; preserve existing task states
+    if not await storage.async_story_exists(story_id):
+        story_desc = entry.data.get("story_description", "")
+        tasks = entry.data.get("tasks", [])
+        await manager.create_story(story_name, story_desc, tasks)
 
     # Store manager and storage in hass.data under the dedicated "entries" key
     hass.data[DOMAIN].setdefault("entries", {})

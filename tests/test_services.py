@@ -60,16 +60,37 @@ async def test_services_registered(hass: HomeAssistant):
     assert hass.services.has_service(DOMAIN, SERVICE_CLONE_STORY)
 
 
+def _make_mock_storage_for_story(story_id: str, tasks: list = None):
+    """Helper: create a mock storage that reports story as existing and returns tasks."""
+    storage = AsyncMock()
+    storage.async_story_exists = AsyncMock(return_value=True)
+    storage.load_story = AsyncMock(
+        return_value={"title": story_id, "tasks": tasks or []}
+    )
+    return storage
+
+
 async def test_set_task_state_updates_entity(hass: HomeAssistant, mock_task_entity):
-    """Test that set_task_state actually updates the entity."""
-    # Setup
+    """Test that set_task_state actually updates the entity and refreshes progress."""
+    mock_storage = _make_mock_storage_for_story(
+        "test_story", [{"id": "test_task_1", "state": "done"}]
+    )
+    mock_progress = MagicMock()
+    mock_progress.async_write_ha_state = MagicMock()
+
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {"test_task_1": mock_task_entity},
+        "progress_entities": {"test_story": mock_progress},
+        "entries": {
+            "entry1": {
+                "manager": AsyncMock(),
+                "storage": mock_storage,
+            }
+        },
     }
     await async_setup_services(hass)
 
-    # Call service
     await hass.services.async_call(
         DOMAIN,
         SERVICE_SET_STATE,
@@ -79,15 +100,72 @@ async def test_set_task_state_updates_entity(hass: HomeAssistant, mock_task_enti
 
     # Verify entity was updated
     mock_task_entity.async_update_state.assert_called_once_with("done")
+    # Verify progress entity was refreshed
+    mock_progress.async_write_ha_state.assert_called_once()
+
+
+async def test_set_task_state_refreshes_progress_entity(hass: HomeAssistant):
+    """Test that set_task_state triggers a progress entity refresh.
+
+    This is the regression test for the bug where the progress percentage
+    was not updating after a task state changed.
+    """
+    task_id = "kitchen_task_0"
+    story_id = "kitchen"
+
+    task_entity = MagicMock()
+    task_entity.task_id = task_id
+    task_entity.story_id = story_id
+    task_entity.async_update_state = AsyncMock()
+
+    updated_tasks = [
+        {"id": "kitchen_task_0", "state": "done"},
+        {"id": "kitchen_task_1", "state": "todo"},
+    ]
+    mock_storage = AsyncMock()
+    mock_storage.async_story_exists = AsyncMock(return_value=True)
+    mock_storage.load_story = AsyncMock(
+        return_value={"title": "Kitchen", "tasks": updated_tasks}
+    )
+
+    mock_progress = MagicMock()
+    mock_progress.tasks = [
+        {"id": "kitchen_task_0", "state": "todo"},  # stale state before service call
+        {"id": "kitchen_task_1", "state": "todo"},
+    ]
+    mock_progress.async_write_ha_state = MagicMock()
+
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {task_id: task_entity},
+        "progress_entities": {story_id: mock_progress},
+        "entries": {"entry1": {"manager": AsyncMock(), "storage": mock_storage}},
+    }
+    await async_setup_services(hass)
+
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_SET_STATE,
+        {"task_id": task_id, "new_state": "done"},
+        blocking=True,
+    )
+
+    # Progress entity tasks must be updated with the reloaded list from storage
+    assert mock_progress.tasks == updated_tasks
+    # HA state must be pushed
+    mock_progress.async_write_ha_state.assert_called_once()
 
 
 async def test_set_task_state_task_not_found(hass: HomeAssistant):
     """Test set_task_state service with non-existent task."""
-    # Setup with empty task registry
-    hass.data[DOMAIN] = {"service_ref_count": 0, "task_entities": {}}
+    hass.data[DOMAIN] = {
+        "service_ref_count": 0,
+        "task_entities": {},
+        "progress_entities": {},
+        "entries": {},
+    }
     await async_setup_services(hass)
 
-    # Call service with non-existent task
     with pytest.raises(TaskNotFoundError, match="Task 'nonexistent_task' not found"):
         await hass.services.async_call(
             DOMAIN,
@@ -99,16 +177,16 @@ async def test_set_task_state_task_not_found(hass: HomeAssistant):
 
 async def test_set_task_state_storage_failure(hass: HomeAssistant, mock_task_entity):
     """Test set_task_state handles storage failure gracefully."""
-    # Setup entity that raises ValueError on update
     mock_task_entity.async_update_state.side_effect = ValueError("Storage error")
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {"test_task_1": mock_task_entity},
+        "progress_entities": {},
+        "entries": {},
     }
     await async_setup_services(hass)
 
-    # Call service should propagate the error
     with pytest.raises(ValueError, match="Storage error"):
         await hass.services.async_call(
             DOMAIN,
@@ -120,9 +198,12 @@ async def test_set_task_state_storage_failure(hass: HomeAssistant, mock_task_ent
 
 async def test_set_task_state_all_valid_states(hass: HomeAssistant, mock_task_entity):
     """Test set_task_state with all valid task states."""
+    mock_storage = _make_mock_storage_for_story("test_story", [])
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {"test_task_1": mock_task_entity},
+        "progress_entities": {},
+        "entries": {"entry1": {"manager": AsyncMock(), "storage": mock_storage}},
     }
     await async_setup_services(hass)
 
@@ -142,7 +223,6 @@ async def test_set_task_state_all_valid_states(hass: HomeAssistant, mock_task_en
 
 async def test_set_task_state_multiple_stories(hass: HomeAssistant, mock_task_entity):
     """Test set_task_state works across multiple stories."""
-    # Create tasks from different stories
     task1 = MagicMock()
     task1.task_id = "story1_task_0"
     task1.story_id = "story1"
@@ -153,11 +233,22 @@ async def test_set_task_state_multiple_stories(hass: HomeAssistant, mock_task_en
     task2.story_id = "story2"
     task2.async_update_state = AsyncMock()
 
+    storage1 = _make_mock_storage_for_story("story1", [])
+    storage2 = _make_mock_storage_for_story("story2", [])
+    # Make storage1 only recognise story1 and storage2 only story2
+    storage1.async_story_exists = AsyncMock(side_effect=lambda sid: sid == "story1")
+    storage2.async_story_exists = AsyncMock(side_effect=lambda sid: sid == "story2")
+
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {
             "story1_task_0": task1,
             "story2_task_0": task2,
+        },
+        "progress_entities": {},
+        "entries": {
+            "entry1": {"manager": AsyncMock(), "storage": storage1},
+            "entry2": {"manager": AsyncMock(), "storage": storage2},
         },
     }
     await async_setup_services(hass)
@@ -186,9 +277,12 @@ async def test_set_task_state_multiple_stories(hass: HomeAssistant, mock_task_en
 
 async def test_set_task_state_logging(hass: HomeAssistant, mock_task_entity):
     """Test that set_task_state logs appropriately."""
+    mock_storage = _make_mock_storage_for_story("test_story", [])
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {"test_task_1": mock_task_entity},
+        "progress_entities": {},
+        "entries": {"entry1": {"manager": AsyncMock(), "storage": mock_storage}},
     }
     await async_setup_services(hass)
 
@@ -658,7 +752,7 @@ async def test_add_task_story_not_in_callbacks(hass: HomeAssistant):
     """Test add_task raises ValueError when story has no entity callback."""
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
-        "entity_callbacks": {},  # No callback for this story
+        "select_callbacks": {},  # No callback for this story
         "task_entities": {},
         "progress_entities": {},
     }
@@ -726,7 +820,7 @@ async def test_add_task_success_creates_entity(
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
-        "entity_callbacks": {"kitchen": mock_add_entities},
+        "select_callbacks": {"kitchen": mock_add_entities},
         "task_entities": {},
         "progress_entities": {"kitchen": mock_progress},
         "entries": {
@@ -766,7 +860,7 @@ async def test_add_task_success_updates_progress(
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
-        "entity_callbacks": {"kitchen": MagicMock()},
+        "select_callbacks": {"kitchen": MagicMock()},
         "task_entities": {},
         "progress_entities": {"kitchen": mock_progress},
         "entries": {
@@ -806,7 +900,7 @@ async def test_add_task_with_all_optional_fields(
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
-        "entity_callbacks": {"kitchen": MagicMock()},
+        "select_callbacks": {"kitchen": MagicMock()},
         "task_entities": {},
         "progress_entities": {"kitchen": MagicMock()},
         "entries": {
@@ -847,7 +941,7 @@ async def test_add_task_default_state_passed_to_manager(
     """Test add_task service uses 'todo' as default state."""
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
-        "entity_callbacks": {"kitchen": MagicMock()},
+        "select_callbacks": {"kitchen": MagicMock()},
         "task_entities": {},
         "progress_entities": {"kitchen": MagicMock()},
         "entries": {
@@ -876,7 +970,7 @@ async def test_add_task_manager_not_found_raises(hass: HomeAssistant):
     """Test add_task raises ValueError when no manager entry found for story."""
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
-        "entity_callbacks": {"kitchen": MagicMock()},
+        "select_callbacks": {"kitchen": MagicMock()},
         "task_entities": {},
         "progress_entities": {},
         # No entry_data with manager + matching storage
@@ -897,7 +991,7 @@ async def test_add_task_all_valid_states_pass_schema(hass: HomeAssistant):
     for state in TASK_STATES:
         hass.data[DOMAIN] = {
             "service_ref_count": 0,
-            "entity_callbacks": {},  # Will fail at story lookup, but schema is valid
+            "select_callbacks": {},  # Will fail at story lookup, but schema is valid
         }
         await async_setup_services(hass)
 
@@ -930,7 +1024,7 @@ async def test_add_task_manager_raises_value_error(
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
-        "entity_callbacks": {"kitchen": MagicMock()},
+        "select_callbacks": {"kitchen": MagicMock()},
         "task_entities": initial_task_entities,
         "progress_entities": {"kitchen": mock_progress},
         "entries": {
@@ -1114,7 +1208,7 @@ async def test_delete_task_removes_entity_from_registry(
         # the contract with get_task_unique_id so format changes are caught)
         expected_unique_id = get_task_unique_id(task_id)
         mock_reg.async_get_entity_id.assert_called_once_with(
-            "sensor", DOMAIN, expected_unique_id
+            "select", DOMAIN, expected_unique_id
         )
 
         # Entity registry remove should be called with the found entity_id
@@ -1720,12 +1814,15 @@ async def test_clone_story_success(hass: HomeAssistant):
     mock_manager, mock_storage = _make_mock_manager_and_storage_for_clone(
         story_id, story_data
     )
-    mock_add_entities = MagicMock()
+    # The service calls sensor_add for progress entities and select_add for task entities
+    mock_sensor_add = MagicMock()
+    mock_select_add = MagicMock()
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {},
-        "entity_callbacks": {story_id: mock_add_entities},
+        "select_callbacks": {story_id: mock_select_add},
+        "sensor_callbacks": {story_id: mock_sensor_add},
         "progress_entities": {},
         "entries": {
             "entry_kitchen": {
@@ -1746,11 +1843,15 @@ async def test_clone_story_success(hass: HomeAssistant):
     # Manager's async_clone_story must have been called
     mock_manager.async_clone_story.assert_called_once_with(story_id, "Kitchen Copy")
 
-    # async_add_entities must have been called with new entities
-    assert mock_add_entities.call_count == 1
-    new_entities = mock_add_entities.call_args[0][0]
-    # Should include 1 progress entity + 1 task entity
-    assert len(new_entities) == 2
+    # sensor_add called once with [progress_entity]
+    mock_sensor_add.assert_called_once()
+    progress_entities = mock_sensor_add.call_args[0][0]
+    assert len(progress_entities) == 1
+
+    # select_add called once with [task_entity]
+    mock_select_add.assert_called_once()
+    task_entities_added = mock_select_add.call_args[0][0]
+    assert len(task_entities_added) == 1
 
     cloned_story_id = "kitchen_copy"
 
@@ -1778,7 +1879,7 @@ async def test_clone_story_source_not_found(hass: HomeAssistant):
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {},
-        "entity_callbacks": {},
+        "select_callbacks": {},
         "progress_entities": {},
         "entries": {
             "entry_data": {
@@ -1813,7 +1914,7 @@ async def test_clone_story_manager_raises_propagates(hass: HomeAssistant):
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {},
-        "entity_callbacks": {story_id: mock_add_entities},
+        "select_callbacks": {story_id: mock_add_entities},
         "progress_entities": {},
         "entries": {
             "entry_kitchen": {
@@ -1854,7 +1955,7 @@ async def test_clone_story_no_entity_callback_does_not_raise(hass: HomeAssistant
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {},
-        "entity_callbacks": {},  # No callbacks at all
+        "select_callbacks": {},  # No callbacks at all
         "progress_entities": {},
         "entries": {
             "entry_kitchen": {
@@ -1895,11 +1996,13 @@ async def test_clone_story_registers_callback_for_new_story(hass: HomeAssistant)
         }
     )
     mock_add_entities = MagicMock()
+    mock_sensor_add = MagicMock()
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {},
-        "entity_callbacks": {story_id: mock_add_entities},
+        "select_callbacks": {story_id: mock_add_entities},
+        "sensor_callbacks": {story_id: mock_sensor_add},
         "progress_entities": {},
         "entries": {
             "entry_kitchen": {
@@ -1918,7 +2021,7 @@ async def test_clone_story_registers_callback_for_new_story(hass: HomeAssistant)
     )
 
     # The new story's callback must be registered so add_task works on the clone too
-    assert "kitchen_copy" in hass.data[DOMAIN]["entity_callbacks"]
+    assert "kitchen_copy" in hass.data[DOMAIN]["select_callbacks"]
 
 
 async def test_clone_story_schema_rejects_missing_story_id(hass: HomeAssistant):

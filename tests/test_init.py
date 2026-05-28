@@ -1,7 +1,7 @@
 """Integration tests for StoryFlow."""
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
@@ -23,7 +23,7 @@ async def test_async_setup(hass: HomeAssistant):
 
 
 async def test_async_setup_entry_creates_entities(hass: HomeAssistant):
-    """Test config entry setup creates expected entities."""
+    """Test config entry setup creates expected entities on first-time setup."""
     # Initialize domain data
     hass.data[DOMAIN] = {"service_ref_count": 0}
 
@@ -57,14 +57,20 @@ async def test_async_setup_entry_creates_entities(hass: HomeAssistant):
     )
 
     # Mock the storage and manager
-    with patch("custom_components.storyflow.StorageHandler") as mock_storage, patch(
+    with patch("custom_components.storyflow.StorageHandler") as mock_storage_cls, patch(
         "custom_components.storyflow.StoryManager"
     ) as mock_manager, patch(
         "custom_components.storyflow.async_setup_services"
     ) as mock_services:
 
+        # Story does NOT exist yet → create_story should be called
+        mock_storage_instance = AsyncMock()
+        mock_storage_instance.async_story_exists = AsyncMock(return_value=False)
+        mock_storage_cls.return_value = mock_storage_instance
+
         mock_manager_instance = AsyncMock()
         mock_manager_instance.create_story = AsyncMock(return_value="test_story")
+        mock_manager_instance._generate_story_id = MagicMock(return_value="test_story")
         mock_manager.return_value = mock_manager_instance
 
         # Setup the entry
@@ -76,7 +82,7 @@ async def test_async_setup_entry_creates_entities(hass: HomeAssistant):
         assert DOMAIN in hass.data
         assert entry.entry_id in hass.data[DOMAIN]["entries"]
 
-        # Verify create_story was called
+        # Verify create_story was called on first-time setup
         mock_manager_instance.create_story.assert_called_once_with(
             "Test Story",
             "A test story",
@@ -85,6 +91,53 @@ async def test_async_setup_entry_creates_entities(hass: HomeAssistant):
 
         # Verify services were set up
         mock_services.assert_called_once()
+
+
+async def test_async_setup_entry_skips_create_story_on_reload(hass: HomeAssistant):
+    """Test that setup does NOT overwrite existing storage on reload/restart.
+
+    This is the fix for the bug where tasks were reverting to 'todo' after
+    every HA restart or integration reload.
+    """
+    hass.data[DOMAIN] = {"service_ref_count": 0}
+
+    entry = ConfigEntry(
+        version=1,
+        minor_version=0,
+        domain=DOMAIN,
+        title="Test Story",
+        data={
+            "story_name": "Test Story",
+            "story_description": "A test story",
+            "story_id": "test_story",
+            "tasks": [
+                {"title": "Task 1", "description": "First task", "state": "todo"},
+            ],
+        },
+        source="user",
+        unique_id="test_story_unique",
+    )
+
+    with patch("custom_components.storyflow.StorageHandler") as mock_storage_cls, patch(
+        "custom_components.storyflow.StoryManager"
+    ) as mock_manager, patch("custom_components.storyflow.async_setup_services"):
+
+        # Story ALREADY EXISTS in storage (simulating a reload after task states changed)
+        mock_storage_instance = AsyncMock()
+        mock_storage_instance.async_story_exists = AsyncMock(return_value=True)
+        mock_storage_cls.return_value = mock_storage_instance
+
+        mock_manager_instance = AsyncMock()
+        mock_manager_instance.create_story = AsyncMock(return_value="test_story")
+        mock_manager_instance._generate_story_id = MagicMock(return_value="test_story")
+        mock_manager.return_value = mock_manager_instance
+
+        result = await async_setup_entry(hass, entry)
+
+        assert result is True
+
+        # create_story must NOT be called — would overwrite saved task states
+        mock_manager_instance.create_story.assert_not_called()
 
 
 async def test_async_setup_entry_uses_persisted_story_id(hass: HomeAssistant):
@@ -106,9 +159,11 @@ async def test_async_setup_entry_uses_persisted_story_id(hass: HomeAssistant):
         unique_id="my_story_unique",
     )
 
-    with patch("custom_components.storyflow.StorageHandler"), patch(
+    with patch("custom_components.storyflow.StorageHandler") as mock_storage_cls, patch(
         "custom_components.storyflow.StoryManager"
     ) as mock_manager, patch("custom_components.storyflow.async_setup_services"):
+
+        mock_storage_cls.return_value = AsyncMock()
 
         mock_manager_instance = AsyncMock()
         mock_manager_instance.create_story = AsyncMock(return_value="custom_story_id")
@@ -140,11 +195,13 @@ async def test_async_unload_entry_cleans_up(hass: HomeAssistant):
     )
 
     # Setup first
-    with patch("custom_components.storyflow.StorageHandler"), patch(
+    with patch("custom_components.storyflow.StorageHandler") as mock_storage_cls, patch(
         "custom_components.storyflow.StoryManager"
     ) as mock_manager, patch("custom_components.storyflow.async_setup_services"), patch(
         "custom_components.storyflow.async_unload_services"
     ) as mock_unload:
+
+        mock_storage_cls.return_value = AsyncMock()
 
         mock_manager_instance = AsyncMock()
         mock_manager_instance.create_story = AsyncMock(return_value="test_story")
@@ -157,7 +214,9 @@ async def test_async_unload_entry_cleans_up(hass: HomeAssistant):
 
         # Mock platform unload
         with patch.object(
-            hass.config_entries, "async_unload_platforms", return_value=True
+            hass.config_entries,
+            "async_unload_platforms",
+            new=AsyncMock(return_value=True),
         ):
             # Unload the entry
             result = await async_unload_entry(hass, entry)
@@ -190,13 +249,15 @@ async def test_async_setup_entry_forwards_to_platforms(hass: HomeAssistant):
         unique_id="test_unique",
     )
 
-    with patch("custom_components.storyflow.StorageHandler"), patch(
+    with patch("custom_components.storyflow.StorageHandler") as mock_storage_cls, patch(
         "custom_components.storyflow.StoryManager"
     ) as mock_manager, patch(
         "custom_components.storyflow.async_setup_services"
     ), patch.object(
-        hass.config_entries, "async_forward_entry_setups"
+        hass.config_entries, "async_forward_entry_setups", new_callable=AsyncMock
     ) as mock_forward:
+
+        mock_storage_cls.return_value = AsyncMock()
 
         mock_manager_instance = AsyncMock()
         mock_manager_instance.create_story = AsyncMock(return_value="test_story")
@@ -245,9 +306,12 @@ async def test_multiple_entries_same_hass_data(hass: HomeAssistant):
         unique_id="story2_unique",
     )
 
-    with patch("custom_components.storyflow.StorageHandler"), patch(
+    with patch("custom_components.storyflow.StorageHandler") as mock_storage_cls, patch(
         "custom_components.storyflow.StoryManager"
     ) as mock_manager, patch("custom_components.storyflow.async_setup_services"):
+
+        mock_storage_instance = AsyncMock()
+        mock_storage_cls.return_value = mock_storage_instance
 
         # Create separate mock instances for each entry
         mock_manager_instance1 = AsyncMock()
@@ -292,9 +356,11 @@ async def test_legacy_entry_without_story_id(hass: HomeAssistant):
         unique_id="legacy_unique",
     )
 
-    with patch("custom_components.storyflow.StorageHandler"), patch(
+    with patch("custom_components.storyflow.StorageHandler") as mock_storage_cls, patch(
         "custom_components.storyflow.StoryManager"
     ) as mock_manager, patch("custom_components.storyflow.async_setup_services"):
+
+        mock_storage_cls.return_value = AsyncMock()
 
         mock_manager_instance = AsyncMock()
         # The derived story_id should be used
@@ -342,9 +408,11 @@ async def test_multiple_entries_service_lifecycle(hass: HomeAssistant):
         unique_id="story2_unique",
     )
 
-    with patch("custom_components.storyflow.StorageHandler"), patch(
+    with patch("custom_components.storyflow.StorageHandler") as mock_storage_cls, patch(
         "custom_components.storyflow.StoryManager"
     ) as mock_manager:
+
+        mock_storage_cls.return_value = AsyncMock()
 
         mock_manager_instance = AsyncMock()
         mock_manager_instance.create_story = AsyncMock(
@@ -364,7 +432,9 @@ async def test_multiple_entries_service_lifecycle(hass: HomeAssistant):
 
         # Unload first entry - services should remain
         with patch.object(
-            hass.config_entries, "async_unload_platforms", return_value=True
+            hass.config_entries,
+            "async_unload_platforms",
+            new=AsyncMock(return_value=True),
         ):
             await async_unload_entry(hass, entry1)
             assert hass.data[DOMAIN]["service_ref_count"] == 1
@@ -432,9 +502,11 @@ async def test_entities_registered_during_setup(hass: HomeAssistant):
         unique_id="test_unique",
     )
 
-    with patch("custom_components.storyflow.StorageHandler"), patch(
+    with patch("custom_components.storyflow.StorageHandler") as mock_storage_cls, patch(
         "custom_components.storyflow.StoryManager"
     ) as mock_manager, patch("custom_components.storyflow.async_setup_services"):
+
+        mock_storage_cls.return_value = AsyncMock()
 
         mock_manager_instance = AsyncMock()
         mock_manager_instance.create_story = AsyncMock(return_value="test_story")
@@ -499,11 +571,13 @@ async def test_entities_cleaned_up_during_unload(hass: HomeAssistant):
         unique_id="test_unique",
     )
 
-    with patch("custom_components.storyflow.StorageHandler"), patch(
+    with patch("custom_components.storyflow.StorageHandler") as mock_storage_cls, patch(
         "custom_components.storyflow.StoryManager"
     ) as mock_manager, patch("custom_components.storyflow.async_setup_services"), patch(
         "custom_components.storyflow.async_unload_services"
     ):
+
+        mock_storage_cls.return_value = AsyncMock()
 
         mock_manager_instance = AsyncMock()
         mock_manager_instance.create_story = AsyncMock(return_value="test_story")
@@ -521,7 +595,9 @@ async def test_entities_cleaned_up_during_unload(hass: HomeAssistant):
 
         # Unload entry
         with patch.object(
-            hass.config_entries, "async_unload_platforms", return_value=True
+            hass.config_entries,
+            "async_unload_platforms",
+            new=AsyncMock(return_value=True),
         ):
             await async_unload_entry(hass, entry)
 
@@ -564,9 +640,11 @@ async def test_multiple_stories_entity_registry(hass: HomeAssistant):
         unique_id="story2_unique",
     )
 
-    with patch("custom_components.storyflow.StorageHandler"), patch(
+    with patch("custom_components.storyflow.StorageHandler") as mock_storage_cls, patch(
         "custom_components.storyflow.StoryManager"
     ) as mock_manager, patch("custom_components.storyflow.async_setup_services"):
+
+        mock_storage_cls.return_value = AsyncMock()
 
         mock_manager_instance = AsyncMock()
         mock_manager_instance.create_story = AsyncMock(
@@ -589,7 +667,9 @@ async def test_multiple_stories_entity_registry(hass: HomeAssistant):
 
         # Unload first story
         with patch.object(
-            hass.config_entries, "async_unload_platforms", return_value=True
+            hass.config_entries,
+            "async_unload_platforms",
+            new=AsyncMock(return_value=True),
         ), patch("custom_components.storyflow.async_unload_services"):
             await async_unload_entry(hass, entry1)
 
@@ -617,11 +697,13 @@ async def test_entity_lookup_with_legacy_story_id(hass: HomeAssistant):
         unique_id="legacy_unique",
     )
 
-    with patch("custom_components.storyflow.StorageHandler"), patch(
+    with patch("custom_components.storyflow.StorageHandler") as mock_storage_cls, patch(
         "custom_components.storyflow.StoryManager"
     ) as mock_manager, patch("custom_components.storyflow.async_setup_services"), patch(
         "custom_components.storyflow.async_unload_services"
     ):
+
+        mock_storage_cls.return_value = AsyncMock()
 
         mock_manager_instance = AsyncMock()
         mock_manager_instance.create_story = AsyncMock(return_value="my_test_story")
@@ -641,7 +723,9 @@ async def test_entity_lookup_with_legacy_story_id(hass: HomeAssistant):
 
         # Unload should clean up using derived story_id
         with patch.object(
-            hass.config_entries, "async_unload_platforms", return_value=True
+            hass.config_entries,
+            "async_unload_platforms",
+            new=AsyncMock(return_value=True),
         ):
             await async_unload_entry(hass, entry)
 

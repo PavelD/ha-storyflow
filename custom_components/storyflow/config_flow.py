@@ -1,6 +1,7 @@
 from homeassistant import config_entries
 import voluptuous as vol
 from homeassistant.core import callback
+from homeassistant.helpers import selector
 from .const import DOMAIN
 
 # ---------------------------------------------------------------------------
@@ -131,7 +132,9 @@ class StoryFlowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             {
                 vol.Required("story_name"): str,
                 vol.Optional("story_description", default=""): str,
-                vol.Optional("tasks_raw", default=""): str,
+                vol.Optional("tasks_raw", default=""): selector.TextSelector(
+                    selector.TextSelectorConfig(multiline=True)
+                ),
             }
         )
 
@@ -221,7 +224,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     "story_description",
                     default=current_data.get("story_description", ""),
                 ): str,
-                vol.Optional("tasks_raw", default=tasks_raw_default): str,
+                vol.Optional(
+                    "tasks_raw", default=tasks_raw_default
+                ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
             }
         )
 

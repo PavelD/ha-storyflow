@@ -16,7 +16,7 @@ class StoryManager:
         self.storage = storage_handler
         self.hass = hass
 
-    def _generate_story_id(self, title: str) -> str:
+    def generate_story_id(self, title: str) -> str:
         """Generate a normalized, stable story_id from a human-readable title.
 
         - Lowercase
@@ -32,12 +32,36 @@ class StoryManager:
         return slug or "story"
 
     async def create_story(self, title, description, tasks):
-        """Create a new story and save it to storage."""
-        story_id = self._generate_story_id(title)
+        """Create a new story and save it to storage.
+
+        Generates ``id`` and ``order`` for any tasks that are missing them so
+        that sensor.py can always rely on every persisted task having an id.
+
+        Raises:
+            ValueError: If a story with the generated ID already exists.
+        """
+        story_id = self.generate_story_id(title)
+
+        if await self.storage.async_story_exists(story_id):
+            raise ValueError(
+                f"Story '{story_id}' already exists. "
+                "Use a unique title or update the existing story."
+            )
+
+        # Ensure every task has an id and an order before persisting
+        tasks_with_ids = []
+        for idx, task in enumerate(tasks):
+            task_data = dict(task)
+            if not task_data.get("id"):
+                task_data["id"] = f"{story_id}_task_{idx}"
+            if "order" not in task_data:
+                task_data["order"] = idx
+            tasks_with_ids.append(task_data)
+
         data = {
             "title": title,
             "description": description,
-            "tasks": tasks,
+            "tasks": tasks_with_ids,
         }
         await self.storage.save_story(story_id, data)
         return story_id
@@ -318,7 +342,7 @@ class StoryManager:
             source_title = source_data.get("title", story_id)
             new_title = f"{source_title} (Copy)"
 
-        new_story_id = self._generate_story_id(new_title)
+        new_story_id = self.generate_story_id(new_title)
 
         # Ensure the new story_id does not clash with an existing one
         if await self.storage.async_story_exists(new_story_id):

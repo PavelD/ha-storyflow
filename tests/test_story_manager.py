@@ -29,6 +29,94 @@ def story_manager(mock_storage, mock_hass):
 
 
 @pytest.mark.asyncio
+async def test_create_story_success(story_manager, mock_storage):
+    """Test creating a new story when it does not exist yet."""
+    mock_storage.async_story_exists.return_value = False
+    mock_storage.save_story.return_value = None
+
+    story_id = await story_manager.create_story(
+        "My Story", "A description", [{"title": "Task 1"}]
+    )
+
+    assert story_id == "my_story"
+    mock_storage.save_story.assert_called_once_with(
+        "my_story",
+        {
+            "title": "My Story",
+            "description": "A description",
+            "tasks": [{"title": "Task 1", "id": "my_story_task_0", "order": 0}],
+        },
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_story_raises_if_already_exists(story_manager, mock_storage):
+    """Test that create_story raises ValueError if the story ID already exists.
+
+    This prevents task states from being overwritten on HA restart/reload.
+    """
+    mock_storage.async_story_exists.return_value = True
+
+    with pytest.raises(ValueError, match="already exists"):
+        await story_manager.create_story("My Story", "desc", [])
+
+    # Save must never be called when story already exists
+    mock_storage.save_story.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_story_generates_task_id_and_order(story_manager, mock_storage):
+    """create_story should fill in missing task id and order before persisting."""
+    mock_storage.async_story_exists.return_value = False
+    mock_storage.save_story.return_value = None
+
+    tasks = [
+        {"title": "Task 1"},
+        {"title": "Task 2"},
+    ]
+
+    await story_manager.create_story("My Story", "A description", tasks)
+
+    assert mock_storage.save_story.call_count == 1
+    _, saved_story = mock_storage.save_story.call_args[0]
+    saved_tasks = saved_story["tasks"]
+
+    # All tasks should have id and order populated
+    assert len(saved_tasks) == 2
+    for task in saved_tasks:
+        assert "id" in task and task["id"]
+        assert "order" in task
+
+    # Order should be deterministic (ascending)
+    orders = [task["order"] for task in saved_tasks]
+    assert orders == sorted(orders)
+
+
+@pytest.mark.asyncio
+async def test_create_story_preserves_existing_task_id_and_order(
+    story_manager, mock_storage
+):
+    """create_story should not overwrite provided task id and order."""
+    mock_storage.async_story_exists.return_value = False
+    mock_storage.save_story.return_value = None
+
+    tasks = [
+        {"id": "task-1", "order": 10, "title": "Task 1"},
+        {"id": "task-2", "order": 20, "title": "Task 2"},
+    ]
+
+    await story_manager.create_story("My Story", "A description", tasks)
+
+    assert mock_storage.save_story.call_count == 1
+    _, saved_story = mock_storage.save_story.call_args[0]
+    saved_tasks = saved_story["tasks"]
+
+    # Existing id and order must be preserved
+    assert [task["id"] for task in saved_tasks] == ["task-1", "task-2"]
+    assert [task["order"] for task in saved_tasks] == [10, 20]
+
+
+@pytest.mark.asyncio
 async def test_validate_story_exists_success(story_manager, mock_storage):
     """Test validating an existing story."""
     mock_storage.async_story_exists.return_value = True
@@ -262,7 +350,8 @@ async def test_assign_task_task_not_found(story_manager, mock_storage):
 
 @pytest.mark.asyncio
 async def test_create_story(story_manager, mock_storage):
-    """Test creating a new story."""
+    """Test creating a new story (story does not exist yet)."""
+    mock_storage.async_story_exists.return_value = False
     tasks = [
         {"id": "task1", "title": "Task 1", "state": "todo"},
         {"id": "task2", "title": "Task 2", "state": "todo"},
@@ -276,7 +365,10 @@ async def test_create_story(story_manager, mock_storage):
         {
             "title": "Test Story",
             "description": "Description",
-            "tasks": tasks,
+            "tasks": [
+                {"id": "task1", "title": "Task 1", "state": "todo", "order": 0},
+                {"id": "task2", "title": "Task 2", "state": "todo", "order": 1},
+            ],
         },
     )
 

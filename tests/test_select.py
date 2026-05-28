@@ -146,7 +146,7 @@ async def test_select_setup_entry_registers_task_entities_in_hass_data():
     """Each created TaskEntity should be stored in hass.data[DOMAIN]['task_entities']."""
     stored_tasks = [
         {"id": "task-a", "title": "Task A", "state": "todo"},
-        {"id": "task-b", "title": "Task B", "state": "in_progress"},
+        {"id": "task-b", "title": "Task B", "state": "progress"},
     ]
     storage = _make_mock_storage({"tasks": stored_tasks})
     hass = _make_hass(storage)

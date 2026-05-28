@@ -44,7 +44,7 @@ async def test_create_story_success(story_manager, mock_storage):
         {
             "title": "My Story",
             "description": "A description",
-            "tasks": [{"title": "Task 1"}],
+            "tasks": [{"title": "Task 1", "id": "my_story_task_0", "order": 0}],
         },
     )
 
@@ -313,7 +313,10 @@ async def test_create_story(story_manager, mock_storage):
         {
             "title": "Test Story",
             "description": "Description",
-            "tasks": tasks,
+            "tasks": [
+                {"id": "task1", "title": "Task 1", "state": "todo", "order": 0},
+                {"id": "task2", "title": "Task 2", "state": "todo", "order": 1},
+            ],
         },
     )
 

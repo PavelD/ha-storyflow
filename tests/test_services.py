@@ -1208,7 +1208,7 @@ async def test_delete_task_removes_entity_from_registry(
         # the contract with get_task_unique_id so format changes are caught)
         expected_unique_id = get_task_unique_id(task_id)
         mock_reg.async_get_entity_id.assert_called_once_with(
-            "sensor", DOMAIN, expected_unique_id
+            "select", DOMAIN, expected_unique_id
         )
 
         # Entity registry remove should be called with the found entity_id
@@ -1814,12 +1814,15 @@ async def test_clone_story_success(hass: HomeAssistant):
     mock_manager, mock_storage = _make_mock_manager_and_storage_for_clone(
         story_id, story_data
     )
-    mock_add_entities = MagicMock()
+    # The service calls sensor_add for progress entities and select_add for task entities
+    mock_sensor_add = MagicMock()
+    mock_select_add = MagicMock()
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {},
-        "entity_callbacks": {story_id: mock_add_entities},
+        "entity_callbacks": {story_id: mock_select_add},
+        "sensor_callbacks": {story_id: mock_sensor_add},
         "progress_entities": {},
         "entries": {
             "entry_kitchen": {
@@ -1840,11 +1843,15 @@ async def test_clone_story_success(hass: HomeAssistant):
     # Manager's async_clone_story must have been called
     mock_manager.async_clone_story.assert_called_once_with(story_id, "Kitchen Copy")
 
-    # async_add_entities must have been called with new entities
-    assert mock_add_entities.call_count == 1
-    new_entities = mock_add_entities.call_args[0][0]
-    # Should include 1 progress entity + 1 task entity
-    assert len(new_entities) == 2
+    # sensor_add called once with [progress_entity]
+    mock_sensor_add.assert_called_once()
+    progress_entities = mock_sensor_add.call_args[0][0]
+    assert len(progress_entities) == 1
+
+    # select_add called once with [task_entity]
+    mock_select_add.assert_called_once()
+    task_entities_added = mock_select_add.call_args[0][0]
+    assert len(task_entities_added) == 1
 
     cloned_story_id = "kitchen_copy"
 
@@ -1989,11 +1996,13 @@ async def test_clone_story_registers_callback_for_new_story(hass: HomeAssistant)
         }
     )
     mock_add_entities = MagicMock()
+    mock_sensor_add = MagicMock()
 
     hass.data[DOMAIN] = {
         "service_ref_count": 0,
         "task_entities": {},
         "entity_callbacks": {story_id: mock_add_entities},
+        "sensor_callbacks": {story_id: mock_sensor_add},
         "progress_entities": {},
         "entries": {
             "entry_kitchen": {
